@@ -1917,38 +1917,41 @@ static void ST_overlayDrawer(void)
 			V_DrawScaledPatch(hudinfo[HUD_GRAVBOOTSICO].x, STRINGY(hudinfo[HUD_GRAVBOOTSICO].y), V_SNAPTORIGHT, gravboots);
 		*/
 
-		if (!(multiplayer && demo.playback))
+		if (cv_showviewpoint.value)
 		{
-			if(!P_IsLocalPlayer(stplyr))
+			if (!(multiplayer && demo.playback))
 			{
-				/*char name[MAXPLAYERNAME+1];
-				// shorten the name if its more than twelve characters.
-				strlcpy(name, player_names[stplyr-players], 13);*/
+				if(!P_IsLocalPlayer(stplyr))
+				{
+					/*char name[MAXPLAYERNAME+1];
+					// shorten the name if its more than twelve characters.
+					strlcpy(name, player_names[stplyr-players], 13);*/
 
-				// Show name of player being displayed
-				V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-40, 0, M_GetText("Viewpoint:"));
-				V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-32, V_ALLOWLOWERCASE, player_names[stplyr-players]);
+					// Show name of player being displayed
+					V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-40, V_ALLOWLOWERCASE|V_YELLOWMAP, M_GetText("Viewpoint:"));
+					V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-32, V_ALLOWLOWERCASE, player_names[stplyr-players]);
+				}
 			}
-		}
-		else if (!demo.title)
-		{
+			else if (!demo.title)
+			{
 
-			if (!splitscreen)
-			{
-				V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-40, V_HUDTRANSHALF, M_GetText("Viewpoint:"));
-				V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-32, V_HUDTRANSHALF|V_ALLOWLOWERCASE, player_names[stplyr-players]);
-			}
-			else if (splitscreen == 1)
-			{
-				char name[MAXPLAYERNAME+12];
+				if (!splitscreen)
+				{
+					V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-40, V_HUDTRANSHALF|V_ALLOWLOWERCASE|V_YELLOWMAP, M_GetText("Viewpoint:"));
+					V_DrawCenteredString((BASEVIDWIDTH/2), BASEVIDHEIGHT-32, V_HUDTRANSHALF|V_ALLOWLOWERCASE, player_names[stplyr-players]);
+				}
+				else if (splitscreen == 1)
+				{
+					char name[MAXPLAYERNAME+12];
 
-				INT32 y = (stplyr == &players[displayplayers[0]]) ? 4 : BASEVIDHEIGHT/2-12;
-				sprintf(name, "VIEWPOINT: %s", player_names[stplyr-players]);
-				V_DrawRightAlignedThinString(BASEVIDWIDTH-40, y, V_HUDTRANSHALF|V_ALLOWLOWERCASE|K_calcSplitFlags(V_SNAPTOTOP|V_SNAPTOBOTTOM|V_SNAPTORIGHT), name);
-			}
-			else if (splitscreen)
-			{
-				V_DrawCenteredThinString((vid.width/vid.dupx)/4, BASEVIDHEIGHT/2 - 12, V_HUDTRANSHALF|V_ALLOWLOWERCASE|K_calcSplitFlags(V_SNAPTOBOTTOM|V_SNAPTOLEFT), player_names[stplyr-players]);
+					INT32 y = (stplyr == &players[displayplayers[0]]) ? 4 : BASEVIDHEIGHT/2-12;
+					sprintf(name, "\x82VIEWPOINT:\x80 %s", player_names[stplyr-players]);
+					V_DrawRightAlignedThinString(BASEVIDWIDTH-40, y, V_HUDTRANSHALF|V_ALLOWLOWERCASE|V_6WIDTHSPACE|K_calcSplitFlags(V_SNAPTOTOP|V_SNAPTOBOTTOM|V_SNAPTORIGHT), name);
+				}
+				else if (splitscreen)
+				{
+					V_DrawCenteredThinString((vid.width/vid.dupx)/4, BASEVIDHEIGHT/2 - 12, V_HUDTRANSHALF|V_ALLOWLOWERCASE|V_6WIDTHSPACE|K_calcSplitFlags(V_SNAPTOBOTTOM|V_SNAPTOLEFT), player_names[stplyr-players]);
+				}
 			}
 		}
 
@@ -2029,15 +2032,15 @@ static void ST_overlayDrawer(void)
 			if (splitscreen)
 			{
 				INT32 splitflags = K_calcSplitFlags(V_SNAPTOBOTTOM|V_SNAPTOLEFT);
-				V_DrawThinString(2, (BASEVIDHEIGHT/2)-20, V_HUDTRANSHALF|V_YELLOWMAP|splitflags, M_GetText("- SPECTATING -"));
-				V_DrawThinString(2, (BASEVIDHEIGHT/2)-10, V_HUDTRANSHALF|splitflags, itemtxt);
+				V_DrawThinString(2, (BASEVIDHEIGHT/2)-20, V_HUDTRANSHALF|V_YELLOWMAP|V_6WIDTHSPACE|splitflags, M_GetText("- SPECTATING -"));
+				V_DrawThinString(2, (BASEVIDHEIGHT/2)-10, V_HUDTRANSHALF|V_ALLOWLOWERCASE|V_6WIDTHSPACE|splitflags, itemtxt);
 			}
 			else
 			{
 				V_DrawString(2, BASEVIDHEIGHT-40, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_HUDTRANSHALF|V_YELLOWMAP, M_GetText("- SPECTATING -"));
-				V_DrawString(2, BASEVIDHEIGHT-30, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_HUDTRANSHALF, itemtxt);
-				V_DrawString(2, BASEVIDHEIGHT-20, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_HUDTRANSHALF, M_GetText("Accelerate - Float"));
-				V_DrawString(2, BASEVIDHEIGHT-10, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_HUDTRANSHALF, M_GetText("Brake - Sink"));
+				V_DrawString(2, BASEVIDHEIGHT-30, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_HUDTRANSHALF, itemtxt);
+				V_DrawString(2, BASEVIDHEIGHT-20, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_HUDTRANSHALF, M_GetText("Accelerate - Float"));
+				V_DrawString(2, BASEVIDHEIGHT-10, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_HUDTRANSHALF, M_GetText("Brake - Sink"));
 			}
 		}
 	}
@@ -2048,15 +2051,15 @@ static void ST_overlayDrawer(void)
 		switch (demo.savemode)
 		{
 		case DSM_NOTSAVING:
-			V_DrawRightAlignedThinString(BASEVIDWIDTH - 2, 2, V_HUDTRANS|V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|(G_BattleGametype() ? V_REDMAP : V_SKYMAP), "Look Backward: Save replay");
+			V_DrawRightAlignedThinString(BASEVIDWIDTH - 2, 2, V_HUDTRANS|V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|V_6WIDTHSPACE|(G_BattleGametype() ? V_REDMAP : V_SKYMAP), "Look Backward: Save replay");
 			break;
 
 		case DSM_WILLAUTOSAVE:
-			V_DrawRightAlignedThinString(BASEVIDWIDTH - 2, 2, V_HUDTRANS|V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|(G_BattleGametype() ? V_REDMAP : V_SKYMAP), "Replay will be saved. (Look Backward: Change title)");
+			V_DrawRightAlignedThinString(BASEVIDWIDTH - 2, 2, V_HUDTRANS|V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|V_6WIDTHSPACE|(G_BattleGametype() ? V_REDMAP : V_SKYMAP), "Replay will be saved. (Look Backward: Change title)");
 			break;
 
 		case DSM_WILLSAVE:
-			V_DrawRightAlignedThinString(BASEVIDWIDTH - 2, 2, V_HUDTRANS|V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|(G_BattleGametype() ? V_REDMAP : V_SKYMAP), "Replay will be saved.");
+			V_DrawRightAlignedThinString(BASEVIDWIDTH - 2, 2, V_HUDTRANS|V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|V_6WIDTHSPACE|(G_BattleGametype() ? V_REDMAP : V_SKYMAP), "Replay will be saved.");
 			break;
 
 		case DSM_TITLEENTRY:
@@ -2093,8 +2096,8 @@ void ST_DrawDemoTitleEntry(void)
 	V_DrawString(x + 38, y - 16, V_ALLOWLOWERCASE, "Enter the name of the replay.");
 
 	M_DrawTextBox(x + 50, y + 20, 20, 1);
-	V_DrawThinString(x + 58, y + 28, V_ALLOWLOWERCASE, "Escape - Cancel");
-	V_DrawRightAlignedThinString(x + 220, y + 28, V_ALLOWLOWERCASE, "Enter - Confirm");
+	V_DrawThinString(x + 58, y + 28, V_ALLOWLOWERCASE|V_6WIDTHSPACE, va("[%cESC%c] Cancel", 0x82, 0x80));
+	V_DrawRightAlignedThinString(x + 220, y + 28, V_ALLOWLOWERCASE|V_6WIDTHSPACE, va("[%cEnter%c] Confirm", 0x82, 0x80));
 #undef x
 #undef y
 }

@@ -42,7 +42,7 @@
 
 #ifdef HAVE_IMAGE
 #include "SDL_image.h"
-#elif (!defined(__APPLE__))
+#elif 1
 #define LOAD_XPM //I want XPM!
 #include "IMG_xpm.c" //Alam: I don't want to add SDL_Image.dll/so
 #define HAVE_IMAGE //I have SDL_Image, sortof
@@ -87,7 +87,7 @@
 #endif
 
 // maximum number of windowed modes (see windowedModes[][])
-#define MAXWINMODES (18)
+#define MAXWINMODES (21)
 
 /**	\brief
 */
@@ -166,12 +166,18 @@ static INT32 windowedModes[MAXWINMODES][2] =
 	{1280, 720}, // 1.66
 	{1152, 864}, // 1.33,3.60
 	{1024, 768}, // 1.33,3.20
+	{ 960, 600}, // 1.33,3.20
 	{ 800, 600}, // 1.33,2.50
+	{ 735, 415}, // 1.33,2.50
 	{ 640, 480}, // 1.33,2.00
 	{ 640, 400}, // 1.60,2.00
+	{ 500, 300}, // 1.33
 	{ 320, 240}, // 1.33,1.00
 	{ 320, 200}, // 1.60,1.00
 };
+
+#define CUSTOM_NODENUM 9999
+static INT32 custom_resolutions[2] = {0, 0};
 
 static void Impl_VideoSetupSDLBuffer(void);
 static void Impl_VideoSetupBuffer(void);
@@ -1553,6 +1559,12 @@ INT32 VID_GetModeForSize(INT32 w, INT32 h)
 			return i;
 		}
 	}
+
+	if ((w >= BASEVIDWIDTH && h >= BASEVIDHEIGHT) && (rendermode == render_opengl || (w <= MAXVIDWIDTH && h <= MAXVIDHEIGHT)))
+	{
+		custom_resolutions[0] = w, custom_resolutions[1] = h;
+		return CUSTOM_NODENUM;
+	}
 	return -1;
 #if 0
 	INT32 matchMode = -1, i;
@@ -1685,6 +1697,12 @@ INT32 VID_SetMode(INT32 modeNum)
 	{
 		vid.width = windowedModes[modeNum][0];
 		vid.height = windowedModes[modeNum][1];
+		vid.modenum = modeNum;
+	}
+	else if ((modeNum == CUSTOM_NODENUM) && (custom_resolutions[0] && custom_resolutions[1]))
+	{
+		// at this point these values are assumed to be okay
+		vid.width = custom_resolutions[0], vid.height = custom_resolutions[1];
 		vid.modenum = modeNum;
 	}
 	else

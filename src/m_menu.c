@@ -19,6 +19,7 @@
 #include "m_menu.h"
 
 #include "doomdef.h"
+#include "d_clisrv.h"
 #include "d_main.h"
 #include "d_netcmd.h"
 #include "console.h"
@@ -93,9 +94,9 @@ int	snprintf(char *str, size_t n, const char *fmt, ...);
 #define STRINGHEIGHT 8
 #define FONTBHEIGHT 20
 #define SMALLLINEHEIGHT 8
-#define SLIDER_RANGE 10
+#define SLIDER_RANGE 9
 #define SLIDER_WIDTH (8*SLIDER_RANGE+6)
-#define SERVERS_PER_PAGE 11
+#define SERVERS_PER_PAGE 9
 
 typedef enum
 {
@@ -274,6 +275,11 @@ static void M_ConnectMenu(INT32 choice);
 static void M_ConnectMenuModChecks(INT32 choice);
 static void M_Refresh(INT32 choice);
 static void M_Connect(INT32 choice);
+
+static void M_HandlePreConnect(INT32 choice);
+static void M_PrepareConMenu(INT32 choice);
+static boolean M_QuitPreConnectMenu(void);
+
 #endif
 static void M_StartOfflineServerMenu(INT32 choice);
 static void M_StartServer(INT32 choice);
@@ -356,10 +362,10 @@ static UINT8 playback_enterheld = 0; // horrid hack to prevent holding the butto
 
 // Drawing functions
 static void M_DrawGenericMenu(void);
-static void M_DrawGenericBackgroundMenu(void);
+static void M_DrawGenericScrollMenu(void);
 static void M_DrawCenteredMenu(void);
 static void M_DrawAddons(void);
-static void M_DrawSkyRoom(void);
+//static void M_DrawSkyRoom(void);
 static void M_DrawChecklist(void);
 static void M_DrawEmblemHints(void);
 static void M_DrawPauseMenu(void);
@@ -373,7 +379,7 @@ static void M_DrawTimeAttackMenu(void);
 //static void M_DrawSetupChoosePlayerMenu(void);
 static void M_DrawControl(void);
 static void M_DrawVideoMenu(void);
-static void M_DrawHUDOptions(void);
+// static void M_DrawHUDOptions(void);
 static void M_DrawVideoMode(void);
 static void M_DrawMonitorToggles(void);
 #ifdef HWRENDER
@@ -381,6 +387,7 @@ static void M_OGL_DrawColorMenu(void);
 #endif
 static void M_DrawMPMainMenu(void);
 #ifndef NONET
+static void M_DrawServerInformation(void);
 static void M_DrawConnectMenu(void);
 #endif
 static void M_DrawJoystick(void);
@@ -393,7 +400,7 @@ static boolean M_CancelConnect(void);
 static boolean M_ExitPandorasBox(void);
 static boolean M_QuitMultiPlayerMenu(void);
 static void M_HandleAddons(INT32 choice);
-static void M_HandleSoundTest(INT32 choice);
+// static void M_HandleSoundTest(INT32 choice);
 static void M_HandleImageDef(INT32 choice);
 //static void M_HandleLoadSave(INT32 choice);
 static void M_HandleLevelStats(INT32 choice);
@@ -1048,10 +1055,25 @@ static menuitem_t MP_OfflineServerMenu[] =
 
 static menuitem_t MP_PlayerSetupMenu[] =
 {
-	{IT_KEYHANDLER | IT_STRING,   NULL, "Name",      M_HandleSetupMultiPlayer,   0},
-	{IT_KEYHANDLER | IT_STRING,   NULL, "Character", M_HandleSetupMultiPlayer,  16}, // Tails 01-18-2001
-	{IT_KEYHANDLER | IT_STRING,   NULL, "Color",     M_HandleSetupMultiPlayer, 152},
+	{IT_KEYHANDLER | IT_STRING, NULL, "Name", 	   M_HandleSetupMultiPlayer,   6},
+	{IT_KEYHANDLER | IT_STRING, NULL, "Character", M_HandleSetupMultiPlayer,  30},
+	{IT_KEYHANDLER | IT_STRING, NULL, "Color",	   M_HandleSetupMultiPlayer, 158},
 };
+
+// This is kinda dumb.
+static INT32 MP_PlayerSetupMenu_XOffsets[3] = {68, 115, 102};
+static INT32 MP_PlayerSetupMenu_XPositions[3] = {52, 62, 62};
+
+typedef enum
+{
+	MPPLAYERSETUPITEM_NAME,
+	MPPLAYERSETUPITEM_CHARACTER,
+	MPPLAYERSETUPITEM_COLOR,
+
+	MPPLAYERSETUPITEM_MAX
+} mpplayersetupitem_t;
+
+#define MPPLAYERSETUPITEM_PREVIEW 98
 
 #ifndef NONET
 static menuitem_t MP_ConnectMenu[] =
@@ -1060,17 +1082,15 @@ static menuitem_t MP_ConnectMenu[] =
 	{IT_STRING | IT_KEYHANDLER, NULL, "Page",     M_HandleServerPage, 12},
 	{IT_STRING | IT_CALL,       NULL, "Refresh",  M_Refresh,          20},
 
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,          36},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,          48},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,          60},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,          72},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,          84},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,          96},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,         108},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,         120},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,         132},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,         144},
-	{IT_STRING | IT_SPACE, NULL, "",              M_Connect,         156},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          42},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          58},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          74},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          88},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         102},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         132},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         150},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         168},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         186},
 };
 
 enum
@@ -1081,6 +1101,10 @@ enum
 	FIRSTSERVERLINE
 };
 #endif
+
+static menuitem_t MP_ServerInfoMenu[] = {
+	{IT_KEYHANDLER, NULL, NULL, M_HandlePreConnect, 145},
+};
 
 // ------------------------------------
 // Options and most (?) of its submenus
@@ -1260,26 +1284,29 @@ static menuitem_t OP_Mouse2OptionsMenu[] =
 
 static menuitem_t OP_VideoOptionsMenu[] =
 {
-	{IT_STRING | IT_CALL,	NULL,	"Set Resolution...",	M_VideoModeMenu,		 10},
+	{IT_HEADER, NULL, "Screen", NULL, 0},
+
+	{IT_STRING | IT_CALL,	NULL,	"Set Resolution...",	M_VideoModeMenu,		  5},
 #if (defined (__unix__) && !defined (MSDOS)) || defined (UNIXCOMMON) || defined (HAVE_SDL)
-	{IT_STRING|IT_CVAR,		NULL,	"Fullscreen",			&cv_fullscreen,			 20},
+	{IT_STRING|IT_CVAR,		NULL,	"Fullscreen",			&cv_fullscreen,			 10},
 #endif
-	{IT_STRING | IT_CVAR | IT_CV_SLIDER,
-							NULL,	"Gamma",				&cv_usegamma,			 30},
 
-	{IT_STRING | IT_CVAR,	NULL,	"Draw Distance",		&cv_drawdist,			 45},
-	//{IT_STRING | IT_CVAR,	NULL,	"NiGHTS Draw Dist",		&cv_drawdist_nights,	 55},
-	{IT_STRING | IT_CVAR,	NULL,	"Weather Draw Distance",&cv_drawdist_precip,	 55},
-	//{IT_STRING | IT_CVAR,	NULL,	"Weather Density",		&cv_precipdensity,		 65},
-	{IT_STRING | IT_CVAR,	NULL,	"Skyboxes",				&cv_skybox,				 65},
-	{IT_STRING | IT_CVAR,	NULL,	"Field of View",		&cv_fov,				 75},
+	{IT_HEADER, NULL, "Level", NULL, 20},
+	
+	{IT_STRING | IT_CVAR,	NULL,	"Draw Distance",		&cv_drawdist,			 25},
+	{IT_STRING | IT_CVAR,	NULL,	"Weather Draw Distance",&cv_drawdist_precip,	 30},
+	{IT_STRING | IT_CVAR,	NULL,	"Skyboxes",				&cv_skybox,				 35},
+	{IT_STRING | IT_CVAR,	NULL,	"Field of View",		&cv_fov,				 40},
 
-	{IT_STRING | IT_CVAR,	NULL,	"Show FPS",				&cv_ticrate,			 90},
-	{IT_STRING | IT_CVAR,	NULL,	"Vertical Sync",		&cv_vidwait,			100},
-	{IT_STRING | IT_CVAR,   NULL,   "FPS Cap",              &cv_fpscap,             110},
+	{IT_HEADER, NULL, "Framerate", NULL, 50},
+
+	{IT_STRING | IT_CVAR,	NULL,	"Show FPS",				&cv_ticrate,			 55},
+	{IT_STRING | IT_CVAR,	NULL,	"Vertical Sync",		&cv_vidwait,			 60},
+	{IT_STRING | IT_CVAR,   NULL,   "FPS Cap",              &cv_fpscap,              65},
 
 #ifdef HWRENDER
-	{IT_SUBMENU|IT_STRING,	NULL,	"OpenGL Options...",	&OP_OpenGLOptionsDef,	130},
+	{IT_HEADER, NULL, "Renderer", NULL, 75},
+	{IT_SUBMENU|IT_STRING, NULL, "OpenGL Options...", &OP_OpenGLOptionsDef,	80},
 #endif
 };
 
@@ -1311,19 +1338,24 @@ static menuitem_t OP_VideoModeMenu[] =
 #ifdef HWRENDER
 static menuitem_t OP_OpenGLOptionsMenu[] =
 {
-	{IT_STRING | IT_CVAR,	NULL, "3D Models",					&cv_grmdls,					 10},
-	{IT_STRING | IT_CVAR,	NULL, "Fallback Player 3D Model",	&cv_grfallbackplayermodel,	 20},
-	{IT_STRING|IT_CVAR,		NULL, "Shaders",					&cv_grshaders,				 30},
+	{IT_HEADER, NULL, "3D Models", NULL, 0},
+	
+	{IT_STRING | IT_CVAR,	NULL, "Models",					  &cv_grmdls,				 10},
+	{IT_STRING | IT_CVAR,	NULL, "Fallback Player 3D Model", &cv_grfallbackplayermodel, 20},
+	
+	{IT_HEADER, NULL, "General", NULL, 40},
+	
+	{IT_STRING | IT_CVAR,		NULL, "Shaders",			  &cv_grshaders,	50},
+	{IT_STRING | IT_CVAR,		NULL, "Texture Quality",	  &cv_scr_depth,	60},
+	{IT_STRING | IT_CVAR,		NULL, "Software Perspective", &cv_grshearing,	70},
+	{IT_STRING | IT_CVAR,		NULL, "Texture Filter",		  &cv_grfiltermode, 80},
+	
+	{IT_HEADER, NULL, "Miscelleanous", NULL, 100},
 
-	{IT_STRING|IT_CVAR,		NULL, "Texture Quality",			&cv_scr_depth,				 50},
-	{IT_STRING|IT_CVAR,		NULL, "Texture Filter",				&cv_grfiltermode,			 60},
-	{IT_STRING|IT_CVAR,		NULL, "Anisotropic",				&cv_granisotropicmode,		 70},
+	{IT_STRING | IT_CVAR,		NULL, "Wall Contrast Style", &cv_grfakecontrast,	   110},
+	{IT_STRING | IT_CVAR,		NULL, "Sprite Billboarding", &cv_grspritebillboarding, 120},
+	{IT_STRING | IT_CVAR,		NULL, "Anisotropic",		 &cv_granisotropicmode,	   130},
 
-	{IT_STRING|IT_CVAR,		NULL, "Wall Contrast Style",		&cv_grfakecontrast,			 90},
-	{IT_STRING|IT_CVAR,		NULL, "Sprite Billboarding",		&cv_grspritebillboarding,	100},
-	{IT_STRING|IT_CVAR,		NULL, "Software Perspective",		&cv_grshearing,				110},
-
-	{IT_SUBMENU|IT_STRING,	NULL, "Gamma...",					&OP_OpenGLColorDef,			130},
 };
 
 static menuitem_t OP_OpenGLColorMenu[] =
@@ -1336,36 +1368,26 @@ static menuitem_t OP_OpenGLColorMenu[] =
 
 static menuitem_t OP_SoundOptionsMenu[] =
 {
-	{IT_STRING|IT_CVAR,			NULL, "SFX",					&cv_gamesounds,			 10},
-	{IT_STRING|IT_CVAR|IT_CV_SLIDER,
-								NULL, "SFX Volume",				&cv_soundvolume,		 18},
+	{IT_HEADER, NULL, "General Audio", NULL, 0},
+	
+	{IT_STRING|IT_CVAR,				 NULL, "Sound Effects",	  &cv_gamesounds,		5},
+	{IT_STRING|IT_CVAR|IT_CV_SLIDER, NULL, "Sound Volume",	  &cv_soundvolume,		10},
+	{IT_STRING|IT_CVAR,				 NULL, "Music",					&cv_gamedigimusic,		 20},
+	{IT_STRING|IT_CVAR|IT_CV_SLIDER, NULL, "Music Volume",			&cv_digmusicvolume,		 25},
+	
+	{IT_HEADER, NULL, "Game Audio", NULL, 35},
+	
+	{IT_STRING|IT_CVAR,			NULL, "Chat Notifications",		&cv_chatnotifications,	 40},
+	{IT_STRING|IT_CVAR,			NULL, "Character voices",		&cv_kartvoices,			 45},
+	{IT_STRING|IT_CVAR,			NULL, "Powerup Warning",		&cv_kartinvinsfx,		 50},
+	
+	{IT_HEADER, NULL, "Miscelleanous", NULL, 60},
+	
+	{IT_STRING|IT_CVAR,			NULL, "Reverse L/R Channels",	&stereoreverse,		 65},
+	{IT_STRING|IT_CVAR,			NULL, "Surround Sound",			&surround,			 70},
 
-	{IT_STRING|IT_CVAR,			NULL, "Music",					&cv_gamedigimusic,		 30},
-	{IT_STRING|IT_CVAR|IT_CV_SLIDER,
-								NULL, "Music Volume",			&cv_digmusicvolume,		 38},
-
-/* -- :nonnathisshit:
-	{IT_STRING|IT_CVAR,			NULL, "MIDI",					&cv_gamemidimusic,		 50},
-	{IT_STRING|IT_CVAR|IT_CV_SLIDER,
-								NULL, "MIDI Volume",			&cv_midimusicvolume,	 58},
-#ifdef PC_DOS
-	{IT_STRING|IT_CVAR|IT_CV_SLIDER,
-								NULL, "CD Volume",				&cd_volume,				 40},
-#endif*/
-
-	//{IT_STRING|IT_CALL,			NULL, "Restart Audio System",	M_RestartAudio,			 50},
-
-	{IT_STRING|IT_CVAR,			NULL, "Reverse L/R Channels",	&stereoreverse,			 50},
-	{IT_STRING|IT_CVAR,			NULL, "Surround Sound",			&surround,			 60},
-
-	{IT_STRING|IT_CVAR,			NULL, "Chat Notifications",		&cv_chatnotifications,	 75},
-	{IT_STRING|IT_CVAR,			NULL, "Character voices",		&cv_kartvoices,			 85},
-	{IT_STRING|IT_CVAR,			NULL, "Powerup Warning",		&cv_kartinvinsfx,		 95},
-
-	{IT_KEYHANDLER|IT_STRING,	NULL, "Sound Test",				M_HandleSoundTest,		110},
-
-	{IT_STRING|IT_CVAR,        NULL, "Play Music While Unfocused", &cv_playmusicifunfocused, 125},
-	{IT_STRING|IT_CVAR,        NULL, "Play SFX While Unfocused", &cv_playsoundifunfocused, 135},
+	{IT_STRING|IT_CVAR,        NULL, "Play Music While Unfocused",  &cv_playmusicifunfocused, 80},
+	{IT_STRING|IT_CVAR,        NULL, "Play Sounds While Unfocused", &cv_playsoundifunfocused, 85},
 };
 
 static menuitem_t OP_DataOptionsMenu[] =
@@ -1457,27 +1479,46 @@ static menuitem_t OP_DiscordOptionsMenu[] =
 
 static menuitem_t OP_HUDOptionsMenu[] =
 {
-	{IT_STRING | IT_CVAR, NULL, "Show HUD (F3)",			&cv_showhud,			 10},
-	{IT_STRING | IT_CVAR | IT_CV_SLIDER,
-	                      NULL, "HUD Visibility",			&cv_translucenthud,		 20},
+	{IT_HEADER, NULL, "Heads-Up Display", NULL, 0},
+	
+	{IT_STRING | IT_CVAR, 				 NULL, "Show HUD",	 	   	  &cv_showhud,		    5},
+	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "HUD Translucency", 	  &cv_translucenthud,  10},
+	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Minimap Visibility",  &cv_kartminimap,	   20},
+	{IT_STRING | IT_CVAR, 				 NULL, "Speedometer Display", &cv_kartspeedometer, 25},
+	{IT_STRING | IT_CVAR, 				 NULL, "Input Display",		  &cv_showinput,	   30},
+	{IT_STRING | IT_CVAR, 				 NULL, "Show \"CHECK\"",	  &cv_kartcheck,	   35},
+	
+	{IT_HEADER, NULL, "Console", NULL, 45},
+	
+	{IT_STRING | IT_CVAR, NULL,	"Menu Highlights",			&cons_menuhighlight,     50},
+	{IT_STRING | IT_CVAR, NULL, "Background Glass",			&cons_backcolor,		 55},
+	{IT_STRING | IT_CVAR, NULL,	"Console Text Size",		&cv_constextsize,		 60},
+	
+	{IT_HEADER, NULL, "Online HUD", NULL, 70},
+	
+	{IT_STRING | IT_CVAR, 				 NULL, "Chat Mode",			   &cv_consolechat,	 75},
+	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Chat Box Width",       &cv_chatwidth,	 80},
+	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Chat Box Height",	   &cv_chatheight,	 85},
+	{IT_STRING | IT_CVAR, 				 NULL, "Chat Background Tint", &cv_chatbacktint, 90},
+	
+	{IT_STRING | IT_CVAR, NULL, "Message Fadeout Time", &cv_chattime,			100},
+	{IT_STRING | IT_CVAR, NULL, "Spam Protection",	    &cv_chatspamprotection,	105},
+	
+	{IT_STRING | IT_CVAR, NULL, "Ping Measurement", 	&cv_pingmeasurement,    115},
+	{IT_STRING | IT_CVAR, NULL, "Local Ping display",   &cv_showping,	    	120},
+	
+	{IT_HEADER, NULL, "Miscelleanous", NULL, 130},
+	
+	{IT_STRING | IT_CVAR, NULL,	  "Show Minimap Names",   &cv_showminimapnames, 135},
+	{IT_STRING | IT_CVAR, NULL,   "Show Freeplay Text",   &cv_showfreeplay,     140},
+	{IT_STRING | IT_CVAR, NULL,   "Show Viewpoint Text",  &cv_showviewpoint,     145},
 
-	{IT_STRING | IT_SUBMENU, NULL, "Online HUD options...",&OP_ChatOptionsDef, 	 35},
-	{IT_STRING | IT_CVAR, NULL, "Background Glass",			&cons_backcolor,		 45},
-
-	{IT_STRING | IT_CVAR | IT_CV_SLIDER,
-						  NULL, "Minimap Visibility",		&cv_kartminimap,		 60},
-	{IT_STRING | IT_CVAR, NULL, "Speedometer Display",		&cv_kartspeedometer,	 70},
-	{IT_STRING | IT_CVAR, NULL, "Show \"CHECK\"",			&cv_kartcheck,			 80},
-
-	{IT_STRING | IT_CVAR, NULL,	"Menu Highlights",			&cons_menuhighlight,     95},
-	// highlight info - (GOOD HIGHLIGHT, WARNING HIGHLIGHT) - 105 (see M_DrawHUDOptions)
-
-	{IT_STRING | IT_CVAR, NULL,	"Console Text Size",		&cv_constextsize,		120},
-
-	{IT_STRING | IT_CVAR, NULL,   "Show \"FOCUS LOST\"",  &cv_showfocuslost,   135},
+	{IT_STRING | IT_CVAR, NULL,	  "Animated Voting Screen", &cv_animvoting,       155},
+	{IT_STRING | IT_CVAR, NULL,   "Show \"FOCUS LOST\"",    &cv_showfocuslost,    160},
 };
 
 // Ok it's still called chatoptions but we'll put ping display in here to be clean
+#if 0
 static menuitem_t OP_ChatOptionsMenu[] =
 {
 	// will ANYONE who doesn't know how to use the console want to touch this one?
@@ -1494,6 +1535,7 @@ static menuitem_t OP_ChatOptionsMenu[] =
 
 	{IT_STRING | IT_CVAR, NULL, "Local ping display",		&cv_showping,			90},	// shows ping next to framerate if we want to.
 };
+#endif
 
 static menuitem_t OP_GameOptionsMenu[] =
 {
@@ -1516,79 +1558,44 @@ static menuitem_t OP_GameOptionsMenu[] =
 
 static menuitem_t OP_ServerOptionsMenu[] =
 {
+	{IT_HEADER, NULL, "General", NULL, 0},
 #ifndef NONET
-	{IT_STRING | IT_CVAR | IT_CV_STRING,
-	                         NULL, "Server Name",					&cv_servername,			 10},
+	{IT_STRING | IT_CVAR | IT_CV_STRING, NULL, "Server Name", &cv_servername, 5},
+	
+	{IT_STRING | IT_CVAR,    NULL, "Max. Player Count",				&cv_maxplayers,			20},
+	{IT_STRING | IT_CVAR,    NULL, "Allow Players to Join",			&cv_allownewplayer,		25},
+	{IT_STRING | IT_CVAR,    NULL, "Allow Addon Downloading",		&cv_downloading,		30},
 #endif
+	{IT_STRING | IT_CVAR,    NULL, "Map Progression",				&cv_advancemap,			 35},
 
-	{IT_STRING | IT_CVAR,    NULL, "Intermission Timer",			&cv_inttime,			 40},
-	{IT_STRING | IT_CVAR,    NULL, "Map Progression",				&cv_advancemap,			 50},
-	{IT_STRING | IT_CVAR,    NULL, "Voting Timer",					&cv_votetime,			 60},
-	{IT_STRING | IT_CVAR,    NULL, "Voting Rule Changes",			&cv_kartvoterulechanges, 70},
+	{IT_STRING | IT_CVAR,    NULL, "Intermission Timer",			&cv_inttime,			 45},
+	{IT_STRING | IT_CVAR,    NULL, "Voting Timer",					&cv_votetime,			 50},
+	{IT_STRING | IT_CVAR,    NULL, "Voting Rule Changes",			&cv_kartvoterulechanges, 55},
+
+	{IT_HEADER, NULL, "Gameplay", NULL, 65},
+
+	{IT_STRING | IT_CVAR,    NULL, "Pause Permission",				&cv_pause,				70},
+	{IT_STRING | IT_CVAR,    NULL, "Mute All Chat",					&cv_mute,				75},
 
 #ifndef NONET
-	{IT_STRING | IT_CVAR,    NULL, "Max. Player Count",				&cv_maxplayers,			 90},
-	{IT_STRING | IT_CVAR,    NULL, "Allow Players to Join",			&cv_allownewplayer,		100},
-	{IT_STRING | IT_CVAR,    NULL, "Allow Addon Downloading",		&cv_downloading,		110},
-	{IT_STRING | IT_CVAR,    NULL, "Pause Permission",				&cv_pause,				120},
-	{IT_STRING | IT_CVAR,    NULL, "Mute All Chat",					&cv_mute,				130},
+	{IT_HEADER, NULL, "Advanced", NULL, 85},
 
-	{IT_SUBMENU|IT_STRING,   NULL, "Advanced Options...",			&OP_AdvServerOptionsDef,150},
+	{IT_STRING | IT_CVAR | IT_CV_STRING, NULL, "Server Browser Address", &cv_masterserver,   90},
+
+	{IT_STRING | IT_CVAR,    NULL, "Attempts to Resynchronise",		&cv_resynchattempts,	105},
+	{IT_STRING | IT_CVAR,    NULL, "Delay limit (frames)",			&cv_maxping,			110},
+	{IT_STRING | IT_CVAR,    NULL, "Delay timeout (s)",				&cv_pingtimeout,		115},
+	{IT_STRING | IT_CVAR,    NULL, "Connection timeout (tics)",		&cv_nettimeout,			120},
+	{IT_STRING | IT_CVAR,    NULL, "Join timeout (tics)",			&cv_jointimeout,		125},
+
+	{IT_STRING | IT_CVAR,    NULL, "Max. File transfer (KB)",		&cv_maxsend,			135},
+	{IT_STRING | IT_CVAR,    NULL, "File transfer packet rate",		&cv_downloadspeed,		140},
+
+	{IT_STRING | IT_CVAR,    NULL, "Show IP address of Joiners",	&cv_showjoinaddress,	150},
+	{IT_STRING | IT_CVAR,    NULL, "Show Resyncs",					&cv_blamecfail,			155},
+	{IT_STRING | IT_CVAR,    NULL, "Show File Transfers",			&cv_noticedownload,		160},
 #endif
 };
-
-#ifndef NONET
-static menuitem_t OP_AdvServerOptionsMenu[] =
-{
-	{IT_STRING | IT_CVAR | IT_CV_STRING,
-	                         NULL, "Server Browser Address",		&cv_masterserver,		 10},
-
-	{IT_STRING | IT_CVAR,    NULL, "Attempts to resynchronise",		&cv_resynchattempts,	 40},
-	{IT_STRING | IT_CVAR,    NULL, "Delay limit (frames)",			&cv_maxping,			 50},
-	{IT_STRING | IT_CVAR,    NULL, "Delay timeout (s)",				&cv_pingtimeout,		 60},
-	{IT_STRING | IT_CVAR,    NULL, "Connection timeout (tics)",		&cv_nettimeout,			 70},
-	{IT_STRING | IT_CVAR,    NULL, "Join timeout (tics)",			&cv_jointimeout,		 80},
-
-	{IT_STRING | IT_CVAR,    NULL, "Max. file transfer send (KB)",	&cv_maxsend,			100},
-	{IT_STRING | IT_CVAR,    NULL, "File transfer packet rate",		&cv_downloadspeed,		110},
-
-	{IT_STRING | IT_CVAR,    NULL, "Log join addresses",			&cv_showjoinaddress,	130},
-	{IT_STRING | IT_CVAR,    NULL, "Log resyncs",					&cv_blamecfail,			140},
-	{IT_STRING | IT_CVAR,    NULL, "Log file transfers",			&cv_noticedownload,		150},
-};
-#endif
-
-/*static menuitem_t OP_NetgameOptionsMenu[] =
-{
-	{IT_STRING | IT_CVAR, NULL, "Time Limit",            &cv_timelimit,        10},
-	{IT_STRING | IT_CVAR, NULL, "Point Limit",           &cv_pointlimit,       18},
-
-	{IT_STRING | IT_CVAR, NULL, "Frantic Items",         &cv_kartfrantic,      34},
-
-	{IT_STRING | IT_CVAR, NULL, "Item Respawn",          &cv_itemrespawn,      50},
-	{IT_STRING | IT_CVAR, NULL, "Item Respawn Delay",     &cv_itemrespawntime,  58},
-
-	{IT_STRING | IT_CVAR, NULL, "Player Respawn Delay",  &cv_respawntime,      74},
-
-	{IT_STRING | IT_CVAR, NULL, "Force Skin #",          &cv_forceskin,          90},
-	{IT_STRING | IT_CVAR, NULL, "Restrict Skin Changes", &cv_restrictskinchange, 98},
-
-	//{IT_STRING | IT_CVAR, NULL, "Autobalance Teams",            &cv_autobalance,      114},
-	//{IT_STRING | IT_CVAR, NULL, "Scramble Teams on Map Change", &cv_scrambleonchange, 122},
-};*/
-
-/*static menuitem_t OP_GametypeOptionsMenu[] =
-{
-	{IT_HEADER,           NULL, "RACE",                  NULL,                 2},
-	{IT_STRING | IT_CVAR, NULL, "Game Speed",    		  &cv_kartspeed,    	10},
-	{IT_STRING | IT_CVAR, NULL, "Encore Mode",    		  &cv_kartencore,    	18},
-	{IT_STRING | IT_CVAR, NULL, "Number of Laps",        &cv_numlaps,          26},
-	{IT_STRING | IT_CVAR, NULL, "Use Map Lap Counts",    &cv_usemapnumlaps,    34},
-
-	{IT_HEADER,           NULL, "BATTLE",                NULL,                 50},
-	{IT_STRING | IT_CVAR, NULL, "Starting Bumpers",     &cv_kartbumpers,     58},
-	{IT_STRING | IT_CVAR, NULL, "Karma Comeback",        &cv_kartcomeback,     66},
-};*/
 
 #define ITEMTOGGLEBOTTOMRIGHT
 
@@ -1982,15 +1989,27 @@ menu_t MP_ServerDef = MAPICONMENUSTYLE("M_MULTI", MP_ServerMenu, &MP_MainDef);
 
 menu_t MP_ConnectDef =
 {
-	"M_MULTI",
-	sizeof (MP_ConnectMenu)/sizeof (menuitem_t),
+	NULL,
+	sizeof(MP_ConnectMenu) / sizeof(menuitem_t),
 	&MP_MainDef,
 	MP_ConnectMenu,
 	M_DrawConnectMenu,
-	27,24,
+	27, 5,
 	0,
 	M_CancelConnect
 };
+
+menu_t MP_ServerInfoDef = {
+	NULL,
+	sizeof(MP_ServerInfoMenu) / sizeof(menuitem_t),
+	&MP_ConnectDef,
+	MP_ServerInfoMenu,
+	M_DrawServerInformation,
+	32, 40,
+	0,
+	M_QuitPreConnectMenu
+};
+
 #endif
 menu_t MP_PlayerSetupDef =
 {
@@ -1999,7 +2018,7 @@ menu_t MP_PlayerSetupDef =
 	&MP_MainDef,
 	MP_PlayerSetupMenu,
 	M_DrawSetupMultiPlayerMenu,
-	36, 14,
+	36, 6,
 	0,
 	M_QuitMultiPlayerMenu
 };
@@ -2065,7 +2084,7 @@ menu_t OP_SoundOptionsDef =
 	sizeof (OP_SoundOptionsMenu)/sizeof (menuitem_t),
 	&OP_MainDef,
 	OP_SoundOptionsMenu,
-	M_DrawSkyRoom,
+	M_DrawGenericScrollMenu,
 	30, 30,
 	0,
 	NULL
@@ -2077,19 +2096,25 @@ menu_t OP_HUDOptionsDef =
 	sizeof (OP_HUDOptionsMenu)/sizeof (menuitem_t),
 	&OP_MainDef,
 	OP_HUDOptionsMenu,
-	M_DrawHUDOptions,
+	M_DrawGenericScrollMenu,
 	30, 30,
 	0,
 	NULL
 };
 
-menu_t OP_ChatOptionsDef = DEFAULTMENUSTYLE("M_HUD", OP_ChatOptionsMenu, &OP_HUDOptionsDef, 30, 30);
+// menu_t OP_ChatOptionsDef = DEFAULTMENUSTYLE("M_HUD", OP_ChatOptionsMenu, &OP_HUDOptionsDef, 30, 30);
 
 menu_t OP_GameOptionsDef = DEFAULTMENUSTYLE("M_GAME", OP_GameOptionsMenu, &OP_MainDef, 30, 30);
-menu_t OP_ServerOptionsDef = DEFAULTMENUSTYLE("M_SERVER", OP_ServerOptionsMenu, &OP_MainDef, 24, 30);
-#ifndef NONET
-menu_t OP_AdvServerOptionsDef = DEFAULTMENUSTYLE("M_SERVER", OP_AdvServerOptionsMenu, &OP_ServerOptionsDef, 24, 30);
-#endif
+menu_t OP_ServerOptionsDef = {
+	"M_SERVER", 
+	sizeof(OP_ServerOptionsMenu) / sizeof(menuitem_t), 
+	&OP_MainDef,
+	OP_ServerOptionsMenu,
+	M_DrawGenericScrollMenu,
+	30, 30,
+	0,
+	NULL
+};
 
 //menu_t OP_NetgameOptionsDef = DEFAULTMENUSTYLE("M_SERVER", OP_NetgameOptionsMenu, &OP_ServerOptionsDef, 30, 30);
 //menu_t OP_GametypeOptionsDef = DEFAULTMENUSTYLE("M_SERVER", OP_GametypeOptionsMenu, &OP_ServerOptionsDef, 30, 30);
@@ -2532,6 +2557,9 @@ boolean M_Responder(event_t *ev)
 	if (dedicated || (demo.playback && demo.title)
 	|| gamestate == GS_INTRO || gamestate == GS_CUTSCENE || gamestate == GS_GAMEEND
 	|| gamestate == GS_CREDITS || gamestate == GS_EVALUATION)
+		return false;
+
+	if (CON_Ready() && gamestate != GS_WAITINGPLAYERS)
 		return false;
 
 	if (noFurtherInput)
@@ -2979,11 +3007,13 @@ boolean M_Responder(event_t *ev)
 			{
 				//If we entered the game search menu, but didn't enter a game,
 				//make sure the game doesn't still think we're in a netgame.
-				if (!Playing() && netgame && multiplayer)
+				if (!Playing() && netgame && multiplayer && !canshow_serverlist)
 				{
 					netgame = false;
 					multiplayer = false;
 				}
+
+				canshow_serverlist = isquitting_serverlist = false;
 
 				if (currentMenu == &SP_TimeAttackDef) //|| currentMenu == &SP_NightsAttackDef
 				{
@@ -3032,6 +3062,7 @@ boolean M_Responder(event_t *ev)
 			return false;
 
 		default:
+			CON_Responder(ev);
 			break;
 	}
 
@@ -3135,6 +3166,8 @@ void M_Drawer(void)
 	if (currentMenu == &MessageDef)
 		menuactive = true;
 
+	M_GetGametypeColor();
+
 	if (menuactive)
 	{
 		// now that's more readable with a faded background (yeah like Quake...)
@@ -3142,27 +3175,26 @@ void M_Drawer(void)
 			V_DrawFadeScreen(0xFF00, 16);
 
 		if (currentMenu->drawroutine)
-		{
-			M_GetGametypeColor();
 			currentMenu->drawroutine(); // call current menu Draw routine
-		}
 
 		// Draw version down in corner
 		// ... but only in the MAIN MENU.  I'm a picky bastard.
 		if (currentMenu == &MainDef)
 		{
+			INT32 flags = V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_TRANSLUCENT|V_6WIDTHSPACE|V_ALLOWLOWERCASE;
+
 			if (customversionstring[0] != '\0')
 			{
-				V_DrawThinString(vid.dupx, vid.height - 20*vid.dupy, V_NOSCALESTART|V_TRANSLUCENT, "Mod version:");
-				V_DrawThinString(vid.dupx, vid.height - 10*vid.dupy, V_NOSCALESTART|V_TRANSLUCENT|V_ALLOWLOWERCASE, customversionstring);
+				V_DrawThinString(1, 180, flags|V_YELLOWMAP, "Mod version:");
+				V_DrawThinString(1, 190, flags, customversionstring);
 			}
 			else
 			{
 #ifdef DEVELOP // Development -- show revision / branch info
-				V_DrawThinString(vid.dupx, vid.height - 20*vid.dupy, V_NOSCALESTART|V_TRANSLUCENT|V_ALLOWLOWERCASE, compbranch);
-				V_DrawThinString(vid.dupx, vid.height - 10*vid.dupy, V_NOSCALESTART|V_TRANSLUCENT|V_ALLOWLOWERCASE, comprevision);
+				V_DrawThinString(1, 180, flags, compbranch);
+				V_DrawThinString(1, 190, flags, comprevision);
 #else // Regular build
-				V_DrawThinString(vid.dupx, vid.height - 10*vid.dupy, V_NOSCALESTART|V_TRANSLUCENT|V_ALLOWLOWERCASE, va("%s", VERSIONSTRING));
+				V_DrawThinString(1, 190, flags, va("%s", VERSIONSTRING));
 #endif
 			}
 		}
@@ -3672,53 +3704,63 @@ static void M_DrawSlider(INT32 x, INT32 y, const consvar_t *cv, boolean ontop)
 	INT32 range;
 	patch_t *p;
 
-	for (i = 0; cv->PossibleValue[i+1].strvalue; i++);
-
 	x = BASEVIDWIDTH - x - SLIDER_WIDTH;
 
-	if (ontop)
-	{
-		V_DrawCharacter(x - 16 - (skullAnimCounter/5), y,
-			'\x1C' | highlightflags, false); // left arrow
-		V_DrawCharacter(x+(SLIDER_RANGE*8) + 8 + (skullAnimCounter/5), y,
-			'\x1D' | highlightflags, false); // right arrow
-	}
+	V_DrawScaledPatch(x, y, 0, W_CachePatchName("M_SLIDEL", PU_CACHE));
 
-	if ((range = atoi(cv->defaultvalue)) != cv->value)
+	p =  W_CachePatchName("M_SLIDEM", PU_CACHE);
+	for (i = 1; i < SLIDER_RANGE; i++)
+		V_DrawScaledPatch(x+i*8, y, 0, p);
+
+	p = W_CachePatchName("M_SLIDER", PU_CACHE);
+	V_DrawScaledPatch(x+i*8, y, 0, p);
+
+	// draw the cursor!
+	p = W_CachePatchName("M_SLIDEC", PU_CACHE);
+
+	for (i = 0; cv->PossibleValue[i+1].strvalue; i++);
+
+	if (cv->flags & CV_FLOAT)
+		range = (INT32)(atof(cv->defaultvalue) * FRACUNIT);
+	else
+		range = atoi(cv->defaultvalue);
+
+	if (range != cv->value)
 	{
 		range = ((range - cv->PossibleValue[0].value) * 100 /
-		(cv->PossibleValue[1].value - cv->PossibleValue[0].value));
+		 (cv->PossibleValue[i].value - cv->PossibleValue[0].value));
 
 		if (range < 0)
 			range = 0;
+		
 		if (range > 100)
 			range = 100;
 
-		// draw the default
-		p = W_CachePatchName("M_SLIDEC", PU_CACHE);
-		V_DrawScaledPatch(x - 4 + (((SLIDER_RANGE)*8 + 4)*range)/100, y, 0, p);
+		V_DrawScaledPatch(x + 2 + (SLIDER_RANGE*8*range)/100, y, V_TRANSLUCENT, p);
 	}
 
-	V_DrawScaledPatch(x - 8, y, 0, W_CachePatchName("M_SLIDEL", PU_CACHE));
-
-	p =  W_CachePatchName("M_SLIDEM", PU_CACHE);
-	for (i = 0; i < SLIDER_RANGE; i++)
-		V_DrawScaledPatch (x+i*8, y, 0,p);
-
-	p = W_CachePatchName("M_SLIDER", PU_CACHE);
-	V_DrawScaledPatch(x+SLIDER_RANGE*8, y, 0, p);
-
 	range = ((cv->value - cv->PossibleValue[0].value) * 100 /
-	 (cv->PossibleValue[1].value - cv->PossibleValue[0].value));
+	 (cv->PossibleValue[i].value - cv->PossibleValue[0].value));
 
 	if (range < 0)
 		range = 0;
+	
 	if (range > 100)
 		range = 100;
 
-	// draw the slider cursor
-	p = W_CachePatchName("M_SLIDEC", PU_CACHE);
-	V_DrawScaledPatch(x - 4 + (((SLIDER_RANGE)*8 + 4)*range)/100, y, 0, p);
+	V_DrawScaledPatch(x + 2 + (SLIDER_RANGE*8*range)/100, y, 0, p);
+
+	if (ontop)
+	{
+		// left arrow
+		V_DrawCharacter(x - 6 - (skullAnimCounter/5), y, '\x1C' | highlightflags, false);
+		
+		// right arrow
+		V_DrawCharacter(x + 80 + (skullAnimCounter/5), y, '\x1D' | highlightflags, false);
+
+		// current values and such
+		V_DrawCenteredString(x + 40, y, V_40TRANS, (cv->flags & CV_FLOAT) ? va("%.2f", FIXED_TO_FLOAT(cv->value)) : va("%d", cv->value));
+	}
 }
 
 //
@@ -3802,7 +3844,7 @@ static void M_CentreText(INT32 y, const char *string)
 	INT32 x;
 	//added : 02-02-98 : centre on 320, because V_DrawString centers on vid.width...
 	x = (BASEVIDWIDTH - V_StringWidth(string, V_OLDSPACING))>>1;
-	V_DrawString(x,y,V_OLDSPACING,string);
+	V_DrawString(x,y,V_OLDSPACING|V_ALLOWLOWERCASE,string);
 }
 
 //
@@ -3925,9 +3967,9 @@ static void M_DrawGenericMenu(void)
 					cursory = y;
 
 				if ((currentMenu->menuitems[i].status & IT_DISPLAY)==IT_STRING)
-					V_DrawString(x, y, 0, currentMenu->menuitems[i].text);
+					V_DrawString(x, y, V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 				else
-					V_DrawString(x, y, highlightflags, currentMenu->menuitems[i].text);
+					V_DrawString(x, y, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 
 				// Cvar specific handling
 				switch (currentMenu->menuitems[i].status & IT_TYPE)
@@ -3952,7 +3994,7 @@ static void M_DrawGenericMenu(void)
 							default:
 								w = V_StringWidth(cv->string, 0);
 								V_DrawString(BASEVIDWIDTH - x - w, y,
-									((cv->flags & CV_CHEAT) && !CV_IsSetToDefault(cv) ? warningflags : highlightflags), cv->string);
+									((cv->flags & CV_CHEAT) && !CV_IsSetToDefault(cv) ? warningflags : highlightflags)|V_ALLOWLOWERCASE, cv->string);
 								if (i == itemOn)
 								{
 									V_DrawCharacter(BASEVIDWIDTH - x - 10 - w - (skullAnimCounter/5), y,
@@ -3967,7 +4009,7 @@ static void M_DrawGenericMenu(void)
 					y += STRINGHEIGHT;
 					break;
 			case IT_STRING2:
-				V_DrawString(x, y, 0, currentMenu->menuitems[i].text);
+				V_DrawString(x, y, V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 				/* FALLTHRU */
 			case IT_DYLITLSPACE:
 				y += SMALLLINEHEIGHT;
@@ -3983,21 +4025,21 @@ static void M_DrawGenericMenu(void)
 					y = currentMenu->y+currentMenu->menuitems[i].alphaKey;
 				/* FALLTHRU */
 			case IT_TRANSTEXT2:
-				V_DrawString(x, y, V_TRANSLUCENT, currentMenu->menuitems[i].text);
+				V_DrawString(x, y, V_TRANSLUCENT|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 				y += SMALLLINEHEIGHT;
 				break;
 			case IT_QUESTIONMARKS:
 				if (currentMenu->menuitems[i].alphaKey)
 					y = currentMenu->y+currentMenu->menuitems[i].alphaKey;
 
-				V_DrawString(x, y, V_TRANSLUCENT|V_OLDSPACING, M_CreateSecretMenuOption(currentMenu->menuitems[i].text));
+				V_DrawString(x, y, V_TRANSLUCENT|V_OLDSPACING|V_ALLOWLOWERCASE, M_CreateSecretMenuOption(currentMenu->menuitems[i].text));
 				y += SMALLLINEHEIGHT;
 				break;
 			case IT_HEADERTEXT: // draws 16 pixels to the left, in yellow text
 				if (currentMenu->menuitems[i].alphaKey)
 					y = currentMenu->y+currentMenu->menuitems[i].alphaKey;
 
-				V_DrawString(x-16, y, highlightflags, currentMenu->menuitems[i].text);
+				V_DrawString(x-16, y, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 				y += SMALLLINEHEIGHT;
 				break;
 		}
@@ -4014,14 +4056,140 @@ static void M_DrawGenericMenu(void)
 	{
 		V_DrawScaledPatch(currentMenu->x - 24, cursory, 0,
 			W_CachePatchName("M_CURSOR", PU_CACHE));
-		V_DrawString(currentMenu->x, cursory, highlightflags, currentMenu->menuitems[itemOn].text);
+		V_DrawString(currentMenu->x, cursory, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[itemOn].text);
 	}
 }
 
-static void M_DrawGenericBackgroundMenu(void)
+#define scrollareaheight 72
+
+// note that alphakey is multiplied by 2 for scrolling menus to allow greater usage in UINT8 range.
+static void M_DrawGenericScrollMenu(void)
 {
-	V_DrawPatchFill(W_CachePatchName("SRB2BACK", PU_CACHE));
-	M_DrawGenericMenu();
+	INT32 x, y, i, max, bottom, tempcentery, cursory = 0;
+
+	// DRAW MENU
+	x = currentMenu->x;
+	y = currentMenu->y;
+
+	if (currentMenu->menuitems[currentMenu->numitems-1].alphaKey < scrollareaheight)
+		tempcentery = currentMenu->y; // Not tall enough to scroll, but this thinker is used in case it becomes so
+	else if ((currentMenu->menuitems[itemOn].alphaKey*2 - currentMenu->menuitems[0].alphaKey*2) <= scrollareaheight)
+		tempcentery = currentMenu->y - currentMenu->menuitems[0].alphaKey*2;
+	else if ((currentMenu->menuitems[currentMenu->numitems-1].alphaKey*2 - currentMenu->menuitems[itemOn].alphaKey*2) <= scrollareaheight)
+		tempcentery = currentMenu->y - currentMenu->menuitems[currentMenu->numitems-1].alphaKey*2 + 2*scrollareaheight;
+	else
+		tempcentery = currentMenu->y - currentMenu->menuitems[itemOn].alphaKey*2 + scrollareaheight;
+
+	for (i = 0; i < currentMenu->numitems; i++)
+	{
+		if (currentMenu->menuitems[i].status != IT_DISABLED && currentMenu->menuitems[i].alphaKey*2 + tempcentery >= currentMenu->y)
+			break;
+	}
+
+	for (bottom = currentMenu->numitems; bottom > 0; bottom--)
+	{
+		if (currentMenu->menuitems[bottom-1].status != IT_DISABLED)
+			break;
+	}
+
+	for (max = bottom; max > 0; max--)
+	{
+		if (currentMenu->menuitems[max-1].status != IT_DISABLED && currentMenu->menuitems[max-1].alphaKey*2 + tempcentery <= (currentMenu->y + 2*scrollareaheight))
+			break;
+	}
+
+	if (i)
+		V_DrawString(currentMenu->x - 20, currentMenu->y - (skullAnimCounter/5), highlightflags, "\x1A"); // up arrow
+	if (max != bottom)
+		V_DrawString(currentMenu->x - 20, currentMenu->y + 2*scrollareaheight + (skullAnimCounter/5), highlightflags, "\x1B"); // down arrow
+
+	// draw title (or big pic)
+	M_DrawMenuTitle();
+
+	for (; i < max; i++)
+	{
+		y = currentMenu->menuitems[i].alphaKey*2 + tempcentery;
+		if (i == itemOn)
+			cursory = y;
+		switch (currentMenu->menuitems[i].status & IT_DISPLAY)
+		{
+			case IT_PATCH:
+				// unsupported
+				break;
+			case IT_NOTHING:
+			case IT_DYBIGSPACE:
+				break;
+			case IT_STRING:
+			case IT_WHITESTRING:
+				if (i != itemOn && (currentMenu->menuitems[i].status & IT_DISPLAY)==IT_STRING)
+					V_DrawString(x, y, V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
+				else
+					V_DrawString(x, y, V_ALLOWLOWERCASE|highlightflags, currentMenu->menuitems[i].text);
+
+				// Cvar specific handling
+				switch (currentMenu->menuitems[i].status & IT_TYPE)
+					case IT_CVAR:
+					{
+						consvar_t *cv = (consvar_t *)currentMenu->menuitems[i].itemaction;
+						switch (currentMenu->menuitems[i].status & IT_CVARTYPE)
+						{
+							case IT_CV_SLIDER:
+								M_DrawSlider(x, y, cv, (i == itemOn));
+							case IT_CV_NOPRINT: // color use this
+							case IT_CV_INVISSLIDER: // monitor toggles use this
+								break;
+							case IT_CV_STRING:
+#if 1
+								if (y + 12 > (currentMenu->y + 2*scrollareaheight))
+									break;
+								M_DrawTextBox(x, y + 4, MAXSTRINGLENGTH, 1);
+								V_DrawString(x + 8, y + 12, V_ALLOWLOWERCASE, cv->string);
+								if (skullAnimCounter < 4 && i == itemOn)
+									V_DrawCharacter(x + 8 + V_StringWidth(cv->string, 0), y + 12,
+										'_' | 0x80, false);
+#else // cool new string type stuff, not ready for limelight
+								if (i == itemOn)
+								{
+									V_DrawFill(x-2, y-1, MAXSTRINGLENGTH*8 + 4, 8+3, 159);
+									V_DrawString(x, y, V_ALLOWLOWERCASE, cv->string);
+									if (skullAnimCounter < 4)
+										V_DrawCharacter(x + V_StringWidth(cv->string, 0), y, '_' | 0x80, false);
+								}
+								else
+									V_DrawRightAlignedString(BASEVIDWIDTH - x, y,
+									highlightflags|V_ALLOWLOWERCASE, cv->string);
+#endif
+								break;
+							default:
+								V_DrawRightAlignedString(BASEVIDWIDTH - x, y,
+									((cv->flags & CV_CHEAT) && !CV_IsSetToDefault(cv) ? V_REDMAP : highlightflags)|V_ALLOWLOWERCASE, cv->string);
+								if (i == itemOn)
+								{
+									V_DrawCharacter(BASEVIDWIDTH - x - 10 - V_StringWidth(cv->string, 0) - (skullAnimCounter/5), y,
+											'\x1C' | highlightflags, false);
+									V_DrawCharacter(BASEVIDWIDTH - x + 2 + (skullAnimCounter/5), y,
+											'\x1D' | highlightflags, false);
+								}
+								break;
+						}
+						break;
+					}
+					break;
+			case IT_TRANSTEXT:
+				V_DrawString(x, y, V_TRANSLUCENT|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
+				break;
+			case IT_QUESTIONMARKS:
+				V_DrawString(x, y, V_ALLOWLOWERCASE|V_TRANSLUCENT|V_OLDSPACING, M_CreateSecretMenuOption(currentMenu->menuitems[i].text));
+				break;
+			case IT_HEADERTEXT:
+				V_DrawString(x-16, y, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
+				break;
+		}
+	}
+
+	// DRAW THE SKULL CURSOR
+	V_DrawScaledPatch(currentMenu->x - 24, cursory, 0,
+		W_CachePatchName("M_CURSOR", PU_CACHE));
 }
 
 static void M_DrawPauseMenu(void)
@@ -4248,9 +4416,9 @@ static void M_DrawCenteredMenu(void)
 					cursory = y;
 
 				if ((currentMenu->menuitems[i].status & IT_DISPLAY)==IT_STRING)
-					V_DrawCenteredString(x, y, 0, currentMenu->menuitems[i].text);
+					V_DrawCenteredString(x, y, V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 				else
-					V_DrawCenteredString(x, y, highlightflags, currentMenu->menuitems[i].text);
+					V_DrawCenteredString(x, y, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 
 				// Cvar specific handling
 				switch(currentMenu->menuitems[i].status & IT_TYPE)
@@ -4273,7 +4441,7 @@ static void M_DrawCenteredMenu(void)
 								break;
 							default:
 								V_DrawString(BASEVIDWIDTH - x - V_StringWidth(cv->string, 0), y,
-									((cv->flags & CV_CHEAT) && !CV_IsSetToDefault(cv) ? warningflags : highlightflags), cv->string);
+									((cv->flags & CV_CHEAT) && !CV_IsSetToDefault(cv) ? warningflags : highlightflags)|V_ALLOWLOWERCASE, cv->string);
 								break;
 						}
 						break;
@@ -4281,7 +4449,7 @@ static void M_DrawCenteredMenu(void)
 					y += STRINGHEIGHT;
 					break;
 			case IT_STRING2:
-				V_DrawCenteredString(x, y, 0, currentMenu->menuitems[i].text);
+				V_DrawCenteredString(x, y, V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 				/* FALLTHRU */
 			case IT_DYLITLSPACE:
 				y += SMALLLINEHEIGHT;
@@ -4290,7 +4458,7 @@ static void M_DrawCenteredMenu(void)
 				if (currentMenu->menuitems[i].alphaKey)
 					y = currentMenu->y+currentMenu->menuitems[i].alphaKey;
 
-				V_DrawCenteredString(x, y, V_TRANSLUCENT|V_OLDSPACING, M_CreateSecretMenuOption(currentMenu->menuitems[i].text));
+				V_DrawCenteredString(x, y, V_TRANSLUCENT|V_OLDSPACING|V_ALLOWLOWERCASE, M_CreateSecretMenuOption(currentMenu->menuitems[i].text));
 				y += SMALLLINEHEIGHT;
 				break;
 			case IT_GRAYPATCH:
@@ -4313,7 +4481,7 @@ static void M_DrawCenteredMenu(void)
 	{
 		V_DrawScaledPatch(x - V_StringWidth(currentMenu->menuitems[itemOn].text, 0)/2 - 24, cursory, 0,
 			W_CachePatchName("M_CURSOR", PU_CACHE));
-		V_DrawCenteredString(x, cursory, highlightflags, currentMenu->menuitems[itemOn].text);
+		V_DrawCenteredString(x, cursory, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[itemOn].text);
 	}
 }
 
@@ -5523,6 +5691,8 @@ static void M_HandleReplayHutList(INT32 choice)
 
 #define SCALEDVIEWWIDTH (vid.width/vid.dupx)
 #define SCALEDVIEWHEIGHT (vid.height/vid.dupy)
+#define getTimer(tics) va("%d'%02d\"%02d", G_TicsToMinutes(tics, true), G_TicsToSeconds(tics), G_TicsToCentiseconds(tics))
+
 static void DrawReplayHutReplayInfo(void)
 {
 	lumpnum_t lumpnum;
@@ -5532,122 +5702,106 @@ static void DrawReplayHutReplayInfo(void)
 
 	switch (demolist[dir_on[menudepthleft]].type)
 	{
-	case MD_NOTLOADED:
-		V_DrawCenteredString(160, 40, V_SNAPTOTOP, "Loading replay information...");
-		break;
+		case MD_NOTLOADED:
+			V_DrawCenteredString(160, 30, V_SNAPTOTOP|V_ALLOWLOWERCASE, "Loading replay information...");
+			break;
 
-	case MD_INVALID:
-		V_DrawCenteredString(160, 40, V_SNAPTOTOP|warningflags, "This replay cannot be played.");
-		break;
+		case MD_INVALID:
+			V_DrawCenteredString(160, 30, V_SNAPTOTOP|warningflags, "This replay cannot be played.");
+			break;
 
-	case MD_SUBDIR:
-		break; // Can't think of anything to draw here right now
+		case MD_SUBDIR:
+			break; // Can't think of anything to draw here right now
 
-	case MD_OUTDATED:
-		V_DrawThinString(17, 64, V_SNAPTOTOP|V_ALLOWLOWERCASE|V_TRANSLUCENT|highlightflags, "Recorded on an outdated version.");
-		/*fallthru*/
-	default:
-		// Draw level stuff
-		x = 15; y = 15;
+		case MD_OUTDATED:
+			V_DrawSmallString(100, 29, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_TRANSLUCENT|warningflags, "Recorded on an outdated version.");
+			/* FALLTHRU */
+		default:
+			// Draw level stuff
+			x = 15; y = 15;
 
-		//  A 160x100 image of the level as entry MAPxxP
-		//CONS_Printf("%d %s\n", demolist[dir_on[menudepthleft]].map, G_BuildMapName(demolist[dir_on[menudepthleft]].map));
-		lumpnum = W_CheckNumForName(va("%sP", G_BuildMapName(demolist[dir_on[menudepthleft]].map)));
-		if (lumpnum != LUMPERROR)
-			patch = W_CachePatchNum(lumpnum, PU_CACHE);
-		else
-			patch = W_CachePatchName("M_NOLVL", PU_CACHE);
+			//  A 160x100 image of the level as entry MAPxxP
+			//CONS_Printf("%d %s\n", demolist[dir_on[menudepthleft]].map, G_BuildMapName(demolist[dir_on[menudepthleft]].map));
+			lumpnum = W_CheckNumForName(va("%sP", G_BuildMapName(demolist[dir_on[menudepthleft]].map)));
+			if (lumpnum != LUMPERROR)
+				patch = W_CachePatchNum(lumpnum, PU_CACHE);
+			else
+				patch = W_CachePatchName("M_NOLVL", PU_CACHE);
 
-		if (!(demolist[dir_on[menudepthleft]].kartspeed & DF_ENCORE))
-			V_DrawSmallScaledPatch(x, y, V_SNAPTOTOP, patch);
-		else
-		{
-			w = SHORT(patch->width);
-			h = SHORT(patch->height);
-			V_DrawSmallScaledPatch(x+(w>>1), y, V_SNAPTOTOP|V_FLIP, patch);
-
+			if (!(demolist[dir_on[menudepthleft]].kartspeed & DF_ENCORE))
+				V_DrawSmallScaledPatch(x, y, V_SNAPTOTOP|V_SNAPTOLEFT, patch);
+			else
 			{
-				static angle_t rubyfloattime = 0;
-				const fixed_t rubyheight = FINESINE(rubyfloattime>>ANGLETOFINESHIFT);
-				V_DrawFixedPatch((x+(w>>2))<<FRACBITS, ((y+(h>>2))<<FRACBITS) - (rubyheight<<1), FRACUNIT, V_SNAPTOTOP, W_CachePatchName("RUBYICON", PU_CACHE), NULL);
-				rubyfloattime += FixedMul(ANGLE_MAX/NEWTICRATE, renderdeltatics);
+				w = SHORT(patch->width);
+				h = SHORT(patch->height);
+				V_DrawSmallScaledPatch(x+(w>>1), y, V_SNAPTOTOP|V_SNAPTOLEFT|V_FLIP, patch);
+
+				{
+					static angle_t rubyfloattime = 0;
+					const fixed_t rubyheight = FINESINE(rubyfloattime>>ANGLETOFINESHIFT);
+					V_DrawFixedPatch((x+(w>>2))<<FRACBITS, ((y+(h>>2))<<FRACBITS) - (rubyheight<<1), FRACUNIT, V_SNAPTOTOP|V_SNAPTOLEFT, W_CachePatchName("RUBYICON", PU_CACHE), NULL);
+					rubyfloattime += FixedMul(ANGLE_MAX/NEWTICRATE, renderdeltatics);
+				}
 			}
-		}
 
-		x += 85;
+			x += 85;
 
-		if (mapheaderinfo[demolist[dir_on[menudepthleft]].map-1])
-			V_DrawString(x, y, V_SNAPTOTOP, G_BuildMapTitle(demolist[dir_on[menudepthleft]].map));
-		else
-			V_DrawString(x, y, V_SNAPTOTOP|V_ALLOWLOWERCASE|V_TRANSLUCENT, "Level is not loaded.");
+			if (mapheaderinfo[demolist[dir_on[menudepthleft]].map-1])
+				V_DrawString(x, y, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE, G_BuildMapTitle(demolist[dir_on[menudepthleft]].map));
+			else
+				V_DrawString(x, y, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_TRANSLUCENT, "Level is not loaded.");
 
-		if (demolist[dir_on[menudepthleft]].numlaps)
-			V_DrawThinString(x, y+9, V_SNAPTOTOP|V_ALLOWLOWERCASE, va("(%d laps)", demolist[dir_on[menudepthleft]].numlaps));
+			V_DrawSmallString(x, y+9, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE, demolist[dir_on[menudepthleft]].gametype == GT_RACE ?
+				va("\x88Race\x80 - %s Speed", kartspeed_cons_t[demolist[dir_on[menudepthleft]].kartspeed & ~DF_ENCORE].strvalue) :
+				"\x85""Battle\x80 Mode");
 
-		V_DrawString(x, y+20, V_SNAPTOTOP|V_ALLOWLOWERCASE, demolist[dir_on[menudepthleft]].gametype == GT_RACE ?
-			va("Race (%s speed)", kartspeed_cons_t[demolist[dir_on[menudepthleft]].kartspeed & ~DF_ENCORE].strvalue) :
-			"Battle Mode");
+			if (!demolist[dir_on[menudepthleft]].standings[0].ranking)
+			{
+				// No standings were loaded!
+				V_DrawString(x, y+39, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_TRANSLUCENT, "No standings available.");
+				break;
+			}
 
-		if (!demolist[dir_on[menudepthleft]].standings[0].ranking)
-		{
-			// No standings were loaded!
-			V_DrawString(x, y+39, V_SNAPTOTOP|V_ALLOWLOWERCASE|V_TRANSLUCENT, "No standings available.");
+			V_DrawThinString(x, y+29, V_SNAPTOTOP|V_SNAPTOLEFT|V_6WIDTHSPACE|highlightflags, "WINNER:");
+			V_DrawString(x+40, y+30, V_SNAPTOTOP|V_SNAPTOLEFT|V_6WIDTHSPACE|V_ALLOWLOWERCASE, demolist[dir_on[menudepthleft]].standings[0].name);
 
+			if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
+				V_DrawThinString(x, y+39, V_SNAPTOTOP|V_SNAPTOLEFT|V_6WIDTHSPACE|highlightflags, "TIME:");
+			else
+				V_DrawThinString(x, y+39, V_SNAPTOTOP|V_SNAPTOLEFT|V_6WIDTHSPACE|highlightflags, "SCORE:");
 
+			if (demolist[dir_on[menudepthleft]].standings[0].timeorscore == (UINT32_MAX-1))
+			{
+				V_DrawThinString(x+40, y+40-1, V_SNAPTOTOP|V_SNAPTOLEFT|V_6WIDTHSPACE, "NO CONTEST.");
+			}
+			else if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
+			{
+				V_DrawString(x+40, y+40, V_SNAPTOTOP|V_SNAPTOLEFT, getTimer(demolist[dir_on[menudepthleft]].standings[0].timeorscore));
+			}
+			else
+				V_DrawString(x+40, y+40, V_SNAPTOTOP|V_SNAPTOLEFT, va("%d", demolist[dir_on[menudepthleft]].standings[0].timeorscore));
+
+			// Character face!
+			if (demolist[dir_on[menudepthleft]].standings[0].skin < numskins && W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[0].skin].facewant) != LUMPERROR)
+			{
+				patch = facewantprefix[demolist[dir_on[menudepthleft]].standings[0].skin];
+				colormap = R_GetTranslationColormap(
+					demolist[dir_on[menudepthleft]].standings[0].skin,
+					demolist[dir_on[menudepthleft]].standings[0].color,
+					GTC_MENUCACHE);
+			}
+			else
+			{
+				patch = W_CachePatchName("M_NOWANT", PU_CACHE);
+				colormap = R_GetTranslationColormap(
+					TC_RAINBOW,
+					demolist[dir_on[menudepthleft]].standings[0].color,
+					GTC_MENUCACHE);
+			}
+
+			V_DrawMappedPatch((BASEVIDWIDTH - 15) - patch->width, y+20, V_SNAPTOTOP|V_SNAPTORIGHT, patch, colormap);
 			break;
 		}
-
-		V_DrawThinString(x, y+29, V_SNAPTOTOP|highlightflags, "WINNER");
-		V_DrawString(x+38, y+30, V_SNAPTOTOP|V_ALLOWLOWERCASE, demolist[dir_on[menudepthleft]].standings[0].name);
-
-		if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
-		{
-			V_DrawThinString(x, y+39, V_SNAPTOTOP|highlightflags, "TIME");
-		}
-		else
-		{
-			V_DrawThinString(x, y+39, V_SNAPTOTOP|highlightflags, "SCORE");
-		}
-
-		if (demolist[dir_on[menudepthleft]].standings[0].timeorscore == (UINT32_MAX-1))
-		{
-			V_DrawThinString(x+32, y+40-1, V_SNAPTOTOP, "NO CONTEST");
-		}
-		else if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
-		{
-			V_DrawRightAlignedString(x+84, y+40, V_SNAPTOTOP, va("%d'%02d\"%02d",
-											G_TicsToMinutes(demolist[dir_on[menudepthleft]].standings[0].timeorscore, true),
-											G_TicsToSeconds(demolist[dir_on[menudepthleft]].standings[0].timeorscore),
-											G_TicsToCentiseconds(demolist[dir_on[menudepthleft]].standings[0].timeorscore)
-			));
-		}
-		else
-		{
-			V_DrawString(x+32, y+40, V_SNAPTOTOP, va("%d", demolist[dir_on[menudepthleft]].standings[0].timeorscore));
-		}
-
-		// Character face!
-		if (demolist[dir_on[menudepthleft]].standings[0].skin < numskins && W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[0].skin].facewant) != LUMPERROR)
-		{
-			patch = facewantprefix[demolist[dir_on[menudepthleft]].standings[0].skin];
-			colormap = R_GetTranslationColormap(
-				demolist[dir_on[menudepthleft]].standings[0].skin,
-				demolist[dir_on[menudepthleft]].standings[0].color,
-				GTC_MENUCACHE);
-		}
-		else
-		{
-			patch = W_CachePatchName("M_NOWANT", PU_CACHE);
-			colormap = R_GetTranslationColormap(
-				TC_RAINBOW,
-				demolist[dir_on[menudepthleft]].standings[0].color,
-				GTC_MENUCACHE);
-		}
-
-		V_DrawMappedPatch(BASEVIDWIDTH-15 - SHORT(patch->width), y+20, V_SNAPTOTOP, patch, colormap);
-
-		break;
-	}
 }
 
 static void M_DrawReplayHut(void)
@@ -5684,8 +5838,8 @@ static void M_DrawReplayHut(void)
 	{
 		INT32 maxy;
 		// Scroll menu items if needed
-		cursory = y + currentMenu->menuitems[replaylistitem].alphaKey + dir_on[menudepthleft]*10;
-		maxy = y + currentMenu->menuitems[replaylistitem].alphaKey + sizedirmenu*10;
+		cursory = y + currentMenu->menuitems[replaylistitem].alphaKey + dir_on[menudepthleft]*11;
+		maxy = y + currentMenu->menuitems[replaylistitem].alphaKey + sizedirmenu*11;
 
 		if (cursory > maxy - 20)
 			cursory = maxy - 20;
@@ -5717,11 +5871,11 @@ static void M_DrawReplayHut(void)
 			V_DrawString(x, localy, V_SNAPTOTOP|V_SNAPTOLEFT|highlightflags, currentMenu->menuitems[i].text);
 	}
 
-	y += currentMenu->menuitems[replaylistitem].alphaKey;
+	y += currentMenu->menuitems[replaylistitem].alphaKey - 7;
 
 	for (i = 0; i < (INT16)sizedirmenu; i++)
 	{
-		INT32 localy = y+i*10;
+		INT32 localy = y+i*11;
 		INT32 localx = x;
 
 		if (localy < 65)
@@ -5737,7 +5891,7 @@ static void M_DrawReplayHut(void)
 
 		if (demolist[i].type == MD_SUBDIR)
 		{
-			localx += 8;
+			localx += 9;
 			V_DrawScaledPatch(x - 4, localy, V_SNAPTOTOP|V_SNAPTOLEFT, W_CachePatchName(dirmenu[i][DIR_TYPE] == EXT_UP ? "M_RBACK" : "M_RFLDR", PU_CACHE));
 		}
 
@@ -5751,7 +5905,7 @@ static void M_DrawReplayHut(void)
 				replayScrollDelay--;
 			else if (replayScrollDir > 0)
 			{
-				if (replayScrollTitle < (V_StringWidth(demolist[i].title, 0) - (SCALEDVIEWWIDTH - (x<<1)))<<1)
+				if (replayScrollTitle < (V_ThinStringWidth(demolist[i].title, V_ALLOWLOWERCASE|V_6WIDTHSPACE) - (SCALEDVIEWWIDTH - (x<<1)))<<1)
 					replayScrollTitle++;
 				else
 				{
@@ -5770,14 +5924,14 @@ static void M_DrawReplayHut(void)
 				}
 			}
 
-			V_DrawString(localx - (replayScrollTitle>>1), localy, V_SNAPTOTOP|V_SNAPTOLEFT|highlightflags|V_ALLOWLOWERCASE, demolist[i].title);
+			V_DrawThinString(localx - (replayScrollTitle>>1), localy, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_6WIDTHSPACE|highlightflags, demolist[i].title);
 		}
 		else
-			V_DrawString(localx, localy, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE, demolist[i].title);
+			V_DrawThinString(localx, localy, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE|V_6WIDTHSPACE, demolist[i].title);
 	}
 
 	// Draw scrollbar
-	y = sizedirmenu*10 + currentMenu->menuitems[replaylistitem].alphaKey + 30;
+	y = sizedirmenu*11 + currentMenu->menuitems[replaylistitem].alphaKey + 30;
 	if (y > SCALEDVIEWHEIGHT-80)
 	{
 		V_DrawFill(BASEVIDWIDTH-4, 75, 4, SCALEDVIEWHEIGHT-80, V_SNAPTOTOP|V_SNAPTORIGHT|239);
@@ -5785,12 +5939,12 @@ static void M_DrawReplayHut(void)
 	}
 
 	// Draw the cursor
-	V_DrawScaledPatch(currentMenu->x - 24, cursory, V_SNAPTOTOP|V_SNAPTOLEFT,
+	V_DrawScaledPatch(currentMenu->x - 22, cursory, V_SNAPTOTOP|V_SNAPTOLEFT,
 		W_CachePatchName("M_CURSOR", PU_CACHE));
 	V_DrawString(currentMenu->x, cursory, V_SNAPTOTOP|V_SNAPTOLEFT|highlightflags, currentMenu->menuitems[itemOn].text);
 
 	// Now draw some replay info!
-	V_DrawFill(10, 10, 300, 60, V_SNAPTOTOP|239);
+	V_DrawFill(10, 10, SCALEDVIEWWIDTH - 20, 60, V_SNAPTOTOP|V_SNAPTOLEFT|239);
 
 	if (itemOn == replaylistitem)
 	{
@@ -5803,28 +5957,34 @@ static void M_DrawReplayStartMenu(void)
 	const char *warning;
 	UINT8 i;
 
-	M_DrawGenericBackgroundMenu();
+	V_DrawPatchFill(W_CachePatchName("SRB2BACK", PU_CACHE));
+	M_DrawGenericMenu();
 
-#define STARTY 62-(replayScrollTitle>>1)
 	// Draw rankings beyond first
-	for (i = 1; i < MAXPLAYERS && demolist[dir_on[menudepthleft]].standings[i].ranking; i++)
+	for (i = 0; i < MAXPLAYERS && demolist[dir_on[menudepthleft]].standings[i].ranking; i++)
 	{
+		INT32 starty = (78 - (replayScrollTitle >> 1)) + (i * 20);
+
+		if (starty < 45)
+			continue;
+
 		patch_t *patch;
 		UINT8 *colormap;
 
-		V_DrawRightAlignedString(BASEVIDWIDTH-100, STARTY + i*20, V_SNAPTOTOP|highlightflags, va("%2d", demolist[dir_on[menudepthleft]].standings[i].ranking));
-		V_DrawThinString(BASEVIDWIDTH-96, STARTY + i*20, V_SNAPTOTOP|V_ALLOWLOWERCASE, demolist[dir_on[menudepthleft]].standings[i].name);
+		INT32 colorflags[4] = {V_YELLOWMAP, V_GRAYMAP, V_BROWNMAP, V_PURPLEMAP};
+		INT32 rank = demolist[dir_on[menudepthleft]].standings[i].ranking;
 
+		const char *score_string;
+		
 		if (demolist[dir_on[menudepthleft]].standings[i].timeorscore == UINT32_MAX-1)
-			V_DrawThinString(BASEVIDWIDTH-92, STARTY + i*20 + 9, V_SNAPTOTOP, "NO CONTEST");
+			score_string = "NO CONTEST.";
 		else if (demolist[dir_on[menudepthleft]].gametype == GT_RACE)
-			V_DrawRightAlignedString(BASEVIDWIDTH-40, STARTY + i*20 + 9, V_SNAPTOTOP, va("%d'%02d\"%02d",
-											G_TicsToMinutes(demolist[dir_on[menudepthleft]].standings[i].timeorscore, true),
-											G_TicsToSeconds(demolist[dir_on[menudepthleft]].standings[i].timeorscore),
-											G_TicsToCentiseconds(demolist[dir_on[menudepthleft]].standings[i].timeorscore)
-			));
+			score_string = getTimer(demolist[dir_on[menudepthleft]].standings[i].timeorscore);
 		else
-			V_DrawString(BASEVIDWIDTH-92, STARTY + i*20 + 9, V_SNAPTOTOP, va("%d", demolist[dir_on[menudepthleft]].standings[i].timeorscore));
+			score_string = va("%d", demolist[dir_on[menudepthleft]].standings[i].timeorscore);
+
+		V_DrawThinString(BASEVIDWIDTH - 80, starty, V_SNAPTOTOP|V_SNAPTORIGHT|V_ALLOWLOWERCASE|V_6WIDTHSPACE, demolist[dir_on[menudepthleft]].standings[i].name);
+		V_DrawSmallString(BASEVIDWIDTH - 80, starty + 10, V_SNAPTOTOP|V_SNAPTORIGHT, score_string);
 
 		// Character face!
 		if (demolist[dir_on[menudepthleft]].standings[i].skin < numskins && W_CheckNumForName(skins[demolist[dir_on[menudepthleft]].standings[i].skin].facerank) != LUMPERROR)
@@ -5844,9 +6004,10 @@ static void M_DrawReplayStartMenu(void)
 				GTC_MENUCACHE);
 		}
 
-		V_DrawMappedPatch(BASEVIDWIDTH-5 - SHORT(patch->width), STARTY + i*20, V_SNAPTOTOP, patch, colormap);
+
+		V_DrawMappedPatch((BASEVIDWIDTH - 83) - patch->width, starty - 1, V_SNAPTOTOP|V_SNAPTORIGHT, patch, colormap);
+		V_DrawRightAlignedString((BASEVIDWIDTH - 85) - patch->width, starty + 3, ((rank <= 4) ? colorflags[rank - 1] : 0) | V_SNAPTOTOP|V_SNAPTORIGHT, va("%d", rank));
 	}
-#undef STARTY
 
 	// Handle scrolling rankings
 	if (!interpTimerHackAllow)
@@ -5874,36 +6035,39 @@ static void M_DrawReplayStartMenu(void)
 		}
 	}
 
-	V_DrawFill(10, 10, 300, 60, V_SNAPTOTOP|239);
+	V_DrawFill(10, 10, SCALEDVIEWWIDTH - 20, 60, V_SNAPTOTOP|V_SNAPTOLEFT|239);
 	DrawReplayHutReplayInfo();
 
-	V_DrawString(10, 72, V_SNAPTOTOP|highlightflags|V_ALLOWLOWERCASE, demolist[dir_on[menudepthleft]].title);
+	V_DrawSmallString(10, 72, V_SNAPTOTOP|V_SNAPTOLEFT|V_ALLOWLOWERCASE, va("%cReplay:\x80 %s", '\x80' + (highlightflags >> V_CHARCOLORSHIFT), demolist[dir_on[menudepthleft]].title));
 
 	// Draw a warning prompt if needed
 	switch (demolist[dir_on[menudepthleft]].addonstatus)
 	{
-	case DFILE_ERROR_CANNOTLOAD:
-		warning = "Some addons in this replay cannot be loaded.\nYou can watch anyway, but desyncs may occur.";
-		break;
+		case DFILE_ERROR_CANNOTLOAD:
+			warning = "Some addons in this replay cannot be loaded.\nYou can watch anyway, but desyncs may occur.";
+			break;
 
-	case DFILE_ERROR_NOTLOADED:
-	case DFILE_ERROR_INCOMPLETEOUTOFORDER:
-		warning = "Loading addons will mark your game as modified, and Record Attack may be unavailable.\nYou can watch without loading addons, but desyncs may occur.";
-		break;
+		case DFILE_ERROR_INCOMPLETEOUTOFORDER:
+			warning = "You loaded some of the replay's addons, but they are incomplete.\nYou can watch anyway, but desyncs may occur.";
+			break;
 
-	case DFILE_ERROR_EXTRAFILES:
-		warning = "You have addons loaded that were not present in this replay.\nYou can watch anyway, but desyncs may occur.";
-		break;
+		case DFILE_ERROR_NOTLOADED:
+			warning = "Loading addons will mark your game as modified, and Record Attack may be unavailable.\nYou can watch without loading addons, but desyncs may occur.";
+			break;
 
-	case DFILE_ERROR_OUTOFORDER:
-		warning = "You have this replay's addons loaded, but they are out of order.\nYou can watch anyway, but desyncs may occur.";
-		break;
+		case DFILE_ERROR_EXTRAFILES:
+			warning = "You have addons loaded that were not present in this replay.\nYou can watch anyway, but desyncs may occur.";
+			break;
 
-	default:
-		return;
+		case DFILE_ERROR_OUTOFORDER:
+			warning = "You have this replay's addons loaded, but they are out of order.\nYou can watch anyway, but desyncs may occur.";
+			break;
+
+		default:
+			return;
 	}
 
-	V_DrawSmallString(4, BASEVIDHEIGHT-14, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_ALLOWLOWERCASE, warning);
+	V_DrawSmallString(4, BASEVIDHEIGHT - 14, V_SNAPTOBOTTOM|V_SNAPTOLEFT|V_ALLOWLOWERCASE, warning);
 }
 
 static boolean M_QuitReplayHut(void)
@@ -6645,6 +6809,7 @@ static void M_DrawEmblemHints(void)
 	M_DrawGenericMenu();
 }
 
+#if 0
 static void M_DrawSkyRoom(void)
 {
 	INT32 i, y = 0;
@@ -6706,7 +6871,9 @@ static void M_DrawSkyRoom(void)
 			'\x1D' | highlightflags, false); // right arrow
 	}
 }
+#endif
 
+#if 0
 static void M_HandleSoundTest(INT32 choice)
 {
 	boolean exitmenu = false; // exit to previous menu
@@ -6748,6 +6915,7 @@ static void M_HandleSoundTest(INT32 choice)
 			M_ClearMenus(true);
 	}
 }
+#endif
 
 // Entering secrets menu
 /*static void M_SecretsMenu(INT32 choice)
@@ -7600,8 +7768,8 @@ static void M_DrawStatsMaps(int location)
 		}
 		else if (dotopname)
 		{
-			V_DrawString(20,  y, highlightflags, "LEVEL NAME");
-			V_DrawString(256, y, highlightflags, "MEDALS");
+			V_DrawString(20,  y, highlightflags|V_ALLOWLOWERCASE, "Level Name");
+			V_DrawString(256, y, highlightflags|V_ALLOWLOWERCASE, "Medals");
 			y += 8;
 			dotopname = false;
 		}
@@ -7610,25 +7778,25 @@ static void M_DrawStatsMaps(int location)
 		M_DrawMapEmblems(mnum+1, 295, y);
 
 		if (mapheaderinfo[mnum]->levelflags & LF_NOZONE)
-			V_DrawString(20, y, 0, va("%s %s",
+			V_DrawString(20, y, V_ALLOWLOWERCASE, va("%s %s",
 				mapheaderinfo[mnum]->lvlttl,
 				mapheaderinfo[mnum]->actnum));
 		else
-			V_DrawString(20, y, 0, va("%s %s %s",
+			V_DrawString(20, y, V_ALLOWLOWERCASE, va("%s %s %s",
 				mapheaderinfo[mnum]->lvlttl,
 				(mapheaderinfo[mnum]->zonttl[0] ? mapheaderinfo[mnum]->zonttl : "Zone"),
 				mapheaderinfo[mnum]->actnum));
 
-		y += 8;
+		y += 9;
 
-		if (y >= BASEVIDHEIGHT-8)
+		if (y >= BASEVIDHEIGHT-9)
 			goto bottomarrow;
 	}
 	if (dotopname && !location)
 	{
-		V_DrawString(20,  y, highlightflags, "LEVEL NAME");
-		V_DrawString(256, y, highlightflags, "MEDALS");
-		y += 8;
+		V_DrawString(20,  y, highlightflags, "Level Name");
+		V_DrawString(256, y, highlightflags, "Medals");
+		y += 9;
 	}
 	else if (location)
 		--location;
@@ -7641,7 +7809,7 @@ static void M_DrawStatsMaps(int location)
 			V_DrawString(20, y, highlightflags, "EXTRA MEDALS");
 			if (location)
 			{
-				y += 8;
+				y += 9;
 				location++;
 			}
 		}
@@ -7661,12 +7829,12 @@ static void M_DrawStatsMaps(int location)
 			else
 				V_DrawSmallScaledPatch(295, y, 0, W_CachePatchName("NEEDIT", PU_CACHE));
 
-			V_DrawString(20, y, 0, va("%s", exemblem->description));
+			V_DrawString(20, y, V_ALLOWLOWERCASE, va("%s", exemblem->description));
 		}
 
-		y += 8;
+		y += 9;
 
-		if (y >= BASEVIDHEIGHT-8)
+		if (y >= BASEVIDHEIGHT-9)
 			goto bottomarrow;
 	}
 bottomarrow:
@@ -7686,13 +7854,13 @@ static void M_DrawLevelStats(void)
 
 	M_DrawMenuTitle();
 
-	V_DrawString(20, 24, highlightflags, "Total Play Time:");
-	V_DrawCenteredString(BASEVIDWIDTH/2, 32, 0, va("%i hours, %i minutes, %i seconds",
+	V_DrawString(20, 24, highlightflags|V_ALLOWLOWERCASE, "Total Play Time:");
+	V_DrawCenteredString(BASEVIDWIDTH/2, 32, V_ALLOWLOWERCASE, va("%i hours, %i minutes, %i seconds",
 	                         G_TicsToHours(totalplaytime),
 	                         G_TicsToMinutes(totalplaytime, false),
 	                         G_TicsToSeconds(totalplaytime)));
-	V_DrawString(20, 42, highlightflags, "Total Matches:");
-	V_DrawRightAlignedString(BASEVIDWIDTH-16, 42, 0, va("%i played", matchesplayed));
+	V_DrawString(20, 42, highlightflags|V_ALLOWLOWERCASE, "Total Matches:");
+	V_DrawRightAlignedString(BASEVIDWIDTH-16, 42, V_ALLOWLOWERCASE, va("%i played", matchesplayed));
 
 	for (i = 0; i < NUMMAPS; i++)
 	{
@@ -7708,17 +7876,17 @@ static void M_DrawLevelStats(void)
 		besttime += mainrecords[i]->time;
 	}
 
-	V_DrawString(20, 62, highlightflags, "Combined time records:");
+	V_DrawString(20, 62, highlightflags|V_ALLOWLOWERCASE, "Combined time records:");
 
 	sprintf(beststr, "%i:%02i:%02i.%02i", G_TicsToHours(besttime), G_TicsToMinutes(besttime, false), G_TicsToSeconds(besttime), G_TicsToCentiseconds(besttime));
 	V_DrawRightAlignedString(BASEVIDWIDTH-16, 62, (mapsunfinished ? warningflags : 0), beststr);
 
 	if (mapsunfinished)
-		V_DrawRightAlignedString(BASEVIDWIDTH-16, 70, warningflags, va("(%d unfinished)", mapsunfinished));
+		V_DrawRightAlignedString(BASEVIDWIDTH-16, 70, warningflags|V_ALLOWLOWERCASE, va("(%d unfinished)", mapsunfinished));
 	else
-		V_DrawRightAlignedString(BASEVIDWIDTH-16, 70, recommendedflags, "(complete)");
+		V_DrawRightAlignedString(BASEVIDWIDTH-16, 70, recommendedflags|V_ALLOWLOWERCASE, "(complete)");
 
-	V_DrawString(32, 70, 0, va("x %d/%d", M_CountEmblems(), numemblems+numextraemblems));
+	V_DrawString(32, 70, V_ALLOWLOWERCASE, va("x %d/%d", M_CountEmblems(), numemblems+numextraemblems));
 	V_DrawSmallScaledPatch(20, 70, 0, W_CachePatchName("GOTITA", PU_STATIC));
 
 	M_DrawStatsMaps(statsLocation);
@@ -7806,7 +7974,7 @@ void M_DrawTimeAttackMenu(void)
 		if (i == itemOn)
 			cursory = y;
 
-		V_DrawString(x, y, (dispstatus == IT_WHITESTRING) ? highlightflags : 0 , currentMenu->menuitems[i].text);
+		V_DrawString(x, y, ((dispstatus == IT_WHITESTRING) ? highlightflags : 0)|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 
 		// Cvar specific handling
 		if ((currentMenu->menuitems[i].status & IT_TYPE) == IT_CVAR)
@@ -7822,14 +7990,14 @@ void M_DrawTimeAttackMenu(void)
 			else
 			{
 				const char *str = ((cv == &cv_chooseskin) ? skins[cv_chooseskin.value-1].realname : cv->string);
-				INT32 soffset = 40, strw = V_StringWidth(str, 0);
+				INT32 soffset = 40, strw = V_StringWidth(str, V_ALLOWLOWERCASE);
 
 				// hack to keep the menu from overlapping the level icon
 				if (currentMenu != &SP_TimeAttackDef || cv == &cv_nextmap)
 					soffset = 0;
 
 				// Should see nothing but strings
-				V_DrawString(BASEVIDWIDTH - x - soffset - strw, y, highlightflags, str);
+				V_DrawString(BASEVIDWIDTH - x - soffset - strw, y, highlightflags|V_ALLOWLOWERCASE, str);
 
 				if (i == itemOn)
 				{
@@ -7859,7 +8027,7 @@ void M_DrawTimeAttackMenu(void)
 
 	// DRAW THE SKULL CURSOR
 	V_DrawScaledPatch(x - 24, cursory, 0, W_CachePatchName("M_CURSOR", PU_CACHE));
-	V_DrawString(x, cursory, highlightflags, currentMenu->menuitems[itemOn].text);
+	V_DrawString(x, cursory, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[itemOn].text);
 
 	// Level record list
 	if (cv_nextmap.value)
@@ -7934,7 +8102,7 @@ void M_DrawTimeAttackMenu(void)
 		for (i = 0; i < 4; ++i)
 		{
 			y = currentMenu->y+SP_TimeAttackMenu[i].alphaKey;
-			V_DrawString(x, y, V_TRANSLUCENT, SP_TimeAttackMenu[i].text);
+			V_DrawString(x, y, V_TRANSLUCENT|V_ALLOWLOWERCASE, SP_TimeAttackMenu[i].text);
 			ncv = (consvar_t *)SP_TimeAttackMenu[i].itemaction;
 			if (SP_TimeAttackMenu[i].status & IT_CV_STRING)
 			{
@@ -7951,7 +8119,7 @@ void M_DrawTimeAttackMenu(void)
 					soffset = 0;
 
 				// Should see nothing but strings
-				V_DrawString(BASEVIDWIDTH - x - soffset - strw, y, highlightflags|V_TRANSLUCENT, str);
+				V_DrawString(BASEVIDWIDTH - x - soffset - strw, y, highlightflags|V_TRANSLUCENT|V_ALLOWLOWERCASE, str);
 			}
 		}
 	}
@@ -8288,7 +8456,7 @@ static void M_EraseGuest(INT32 choice)
 	/*if (currentMenu == &SP_NightsGuestReplayDef)
 		M_SetupNextMenu(&SP_NightsAttackDef);
 	else*/
-		M_SetupNextMenu(&SP_TimeAttackDef);
+	M_SetupNextMenu(&SP_TimeAttackDef);
 	CV_AddValue(&cv_nextmap, -1);
 	CV_AddValue(&cv_nextmap, 1);
 	M_StartMessage(M_GetText("Guest replay data erased.\n"),NULL,MM_NOTHING);
@@ -8553,13 +8721,26 @@ Fetch_servers_thread (int *id)
 }
 #endif/*MASTERSERVER*/
 
-#define SERVERHEADERHEIGHT 36
-#define SERVERLINEHEIGHT 12
+#define SERVERHEADERHEIGHT 40
+#define SERVERLINEHEIGHT 15
 
 #define S_LINEY(n) currentMenu->y + SERVERHEADERHEIGHT + (n * SERVERLINEHEIGHT)
 
 #ifndef NONET
 static UINT32 localservercount;
+
+static boolean connectmenu_showfiles;
+static UINT8 filelist_itemon, filelist_maxfiles;
+
+#define MAXSERVERTIPS 4
+
+static char selectedtip[64];
+static const char *servertips[MAXSERVERTIPS] = {
+	"Ping displays aren't that accurate. Such a dirty lie...",
+	"Theres some small chance that you'll find a vanilla server.",
+	"What is this?",
+	":trollface:"
+};
 
 static void M_HandleServerPage(INT32 choice)
 {
@@ -8571,10 +8752,12 @@ static void M_HandleServerPage(INT32 choice)
 			M_NextOpt();
 			S_StartSound(NULL, sfx_menu1);
 			break;
+
 		case KEY_UPARROW:
 			M_PrevOpt();
 			S_StartSound(NULL, sfx_menu1);
 			break;
+
 		case KEY_BACKSPACE:
 		case KEY_ESCAPE:
 			exitmenu = true;
@@ -8582,19 +8765,22 @@ static void M_HandleServerPage(INT32 choice)
 
 		case KEY_ENTER:
 		case KEY_RIGHTARROW:
-			S_StartSound(NULL, sfx_menu1);
 			if ((serverlistpage + 1) * SERVERS_PER_PAGE < serverlistcount)
 			{
 				oldserverlistpage = serverlistpage++;
-				serverlistslidex = BASEVIDWIDTH;
+				serverlistslidex = SCALEDVIEWWIDTH;
+
+				S_StartSoundAtVolume(NULL, sfx_s3kb7, 128);
 			}
 			break;
+
 		case KEY_LEFTARROW:
-			S_StartSound(NULL, sfx_menu1);
 			if (serverlistpage > 0)
 			{
 				oldserverlistpage = serverlistpage--;
-				serverlistslidex = -(BASEVIDWIDTH);
+				serverlistslidex = -(SCALEDVIEWWIDTH);
+
+				S_StartSoundAtVolume(NULL, sfx_s3kb7, 128);
 			}
 			break;
 
@@ -8610,12 +8796,30 @@ static void M_HandleServerPage(INT32 choice)
 	}
 }
 
+#define SERVERNODE(s) s-FIRSTSERVERLINE + serverlistpage * SERVERS_PER_PAGE
+
+static void M_PrepareConMenu(INT32 choice)
+{
+	canshow_serverlist = true;
+	connectmenu_showfiles = false;
+	
+	selected_server = choice;
+	wipegamestate = -1;
+
+	filelist_maxfiles = serverlist[SERVERNODE(selected_server)].info.fileneedednum;
+	filelist_itemon = 0;
+	
+	S_ChangeMusicInternal("netinf", true); // Jaden: Snowy needs this, it fits a bit.
+	M_SetupNextMenu(&MP_ServerInfoDef);
+}
+
 static void M_Connect(INT32 choice)
 {
 	// do not call menuexitfunc
+	(void)choice;
 	M_ClearMenus(false);
 
-	COM_BufAddText(va("connect node %d\n", serverlist[choice-FIRSTSERVERLINE + serverlistpage * SERVERS_PER_PAGE].node));
+	COM_BufAddText(va("connect node %d\n", serverlist[SERVERNODE(selected_server)].node));
 }
 
 static void M_Refresh(INT32 choice)
@@ -8624,6 +8828,8 @@ static void M_Refresh(INT32 choice)
 
 	// first page of servers
 	serverlistpage = 0;
+
+	canshow_serverlist = isquitting_serverlist = false;
 
 	CL_UpdateServerList();
 
@@ -8645,79 +8851,89 @@ static void M_DrawServerCountAndHorizontalBar(void)
 	switch (M_GetWaitingMode())
 	{
 		case M_WAITING_VERSION:
-			text = "Checking for updates";
+			text = "Checking for updates...";
 			break;
 
 		case M_WAITING_SERVERS:
-			text = "Loading server list";
+			text = "Loading server list...";
 			break;
 
 		default:
 			if (serverlistultimatecount > serverlistcount)
 			{
-				text = va("%d/%d servers found%.*s",
+				text = va("%d/%d Servers found\x82%.*s",
 						serverlistcount,
 						serverlistultimatecount,
-						I_GetTime() / NEWTICRATE % 4, "...");
+						(I_GetTime() / 20) % 4, "...");
 			}
-			else if (serverlistcount > 0)
-			{
-				text = va("%d servers found", serverlistcount);
-			}
+			
+			if (!serverlistcount)
+				text = "No Servers found.";
 			else
-			{
-				text = "No servers found";
-			}
+				text = va("%d Servers found!", serverlistcount);
+
+			break;
 	}
 
-	radius = V_StringWidth(text, 0) / 2;
+	radius = V_StringWidth(text, V_ALLOWLOWERCASE) / 2;
 
-	V_DrawCenteredString(center, currentMenu->y+28, 0, text);
+	V_DrawCenteredString(center, currentMenu->y+30, V_ALLOWLOWERCASE, text);
 
 	// Horizontal line!
-	V_DrawFill(1, currentMenu->y+32, center - radius - 2, 1, 0);
-	V_DrawFill(center + radius + 2, currentMenu->y+32, BASEVIDWIDTH - 1, 1, 0);
+	V_DrawFill(0, currentMenu->y + 34, SCALEDVIEWWIDTH - (radius * 6), 1, 0 | V_SNAPTOLEFT);
+
+	V_DrawFill(0, currentMenu->y + 34, (center - radius) - 2, 1, 0);
+	V_DrawFill((center + radius) + 2, currentMenu->y + 34, BASEVIDWIDTH - 1, 1, 0);
+
+	V_DrawFill(0, 184, SCALEDVIEWWIDTH + 1, 1, 0 | V_SNAPTOLEFT);
+}
+
+static void M_DrawServerPageInfo(void)
+{
+	char good_server = '\x80' + ((CV_IsSetToDefault(&cv_masterserver) ? 0 : warningflags) >> V_CHARCOLORSHIFT);
+	INT32 flags = V_ALLOWLOWERCASE;
+
+	// Did you change the Server Browser address? Have a little reminder.
+	V_DrawSmallString(currentMenu->x, 188, flags, va("%cMaster Server: %c%s", 0x82, good_server, cv_masterserver.string));
+
+	// Draw some tips!
+	V_DrawSmallString(currentMenu->x, 193, flags, va("%cNOTICE: %c%s", 0x83, 0x80, selectedtip));
 }
 
 static void M_DrawServerLines(INT32 x, INT32 page)
 {
 	UINT16 i;
-	const char *gt = "Unknown";
-	const char *spd = "";
-
+	
 	for (i = 0; i < min(serverlistcount - page * SERVERS_PER_PAGE, SERVERS_PER_PAGE); i++)
 	{
 		INT32 slindex = i + page * SERVERS_PER_PAGE;
-		UINT32 globalflags = ((serverlist[slindex].info.numberofplayer >= serverlist[slindex].info.maxplayer) ? V_TRANSLUCENT : 0)
-			|((itemOn == FIRSTSERVERLINE+i) ? highlightflags : 0)|V_ALLOWLOWERCASE;
+		serverinfo_pak *info = &serverlist[slindex].info;
 
-		V_DrawString(x, S_LINEY(i), globalflags, serverlist[slindex].info.servername);
+		UINT32 globalflags = ((info->numberofplayer >= info->maxplayer) ? V_TRANSLUCENT : 0) | ((itemOn == FIRSTSERVERLINE+i) ? highlightflags : 0) | V_ALLOWLOWERCASE;
 
-		// Don't use color flags intentionally, the global yellow color will auto override the text color code
-		if (serverlist[slindex].info.modifiedgame)
-			V_DrawSmallString(x+202, S_LINEY(i)+8, globalflags, "\x85" "Mod");
-		if (serverlist[slindex].info.cheatsenabled)
-			V_DrawSmallString(x+222, S_LINEY(i)+8, globalflags, "\x83" "Cheats");
+		const char *gt = (info->gametype < NUMGAMETYPES) ? Gametype_Names[info->gametype] : "Unknown";
+		const char *spd = (info->gametype == GT_RACE) ? kartspeed_cons_t[(info->kartvars & SV_SPEEDMASK)].strvalue : "Unknown";
 
-		V_DrawSmallString(x, S_LINEY(i)+8, globalflags,
-		                     va("Ping: %u", (UINT32)LONG(serverlist[slindex].info.time)));
+		int ping_patch = HU_getPingPatch(info->time, true);
 
-		gt = "Unknown";
-		if (serverlist[slindex].info.gametype < NUMGAMETYPES)
-			gt = Gametype_Names[serverlist[slindex].info.gametype];
+		// server name.
+		V_DrawThinString(x + 26, S_LINEY(i), globalflags|V_6WIDTHSPACE, info->servername);
 
-		V_DrawSmallString(x+46,S_LINEY(i)+8, globalflags,
-		                         va("Players: %02d/%02d", serverlist[slindex].info.numberofplayer, serverlist[slindex].info.maxplayer));
+		// players in the server, with their max amount of players.
+		V_DrawRightAlignedThinString(x + 265, S_LINEY(i), globalflags|V_6WIDTHSPACE, va("[%d - %d]", info->numberofplayer, info->maxplayer));
 
-		V_DrawSmallString(x+112, S_LINEY(i)+8, globalflags, gt);
+		// does the server have any addons?
+		V_DrawRightAlignedSmallString(x + 265, S_LINEY(i) + 9, globalflags, (info->modifiedgame) ? "\x85Modified" : "\x8AVanilla");
+
+		// what is the gametype?
+		V_DrawSmallString(x + 26, S_LINEY(i) + 9, globalflags, gt);
+
+		// as said by the devs themselfs, this thing can be inaccurate in some aspects.
+		V_DrawScaledPatch((x + 12) - (smpinggfx[ping_patch]->width / 2), S_LINEY(i), (globalflags &~ V_ALLOWLOWERCASE), smpinggfx[ping_patch]);
 
 		// display game speed for race gametypes
-		if (serverlist[slindex].info.gametype == GT_RACE)
-		{
-			spd = kartspeed_cons_t[serverlist[slindex].info.kartvars & SV_SPEEDMASK].strvalue;
-
-			V_DrawSmallString(x+132, S_LINEY(i)+8, globalflags, va("(%s Speed)", spd));
-		}
+		if (info->gametype == GT_RACE)
+			V_DrawSmallString(x + 42, S_LINEY(i) + 9, globalflags, va(" - %s Speed", spd));
 
 		MP_ConnectMenu[i+FIRSTSERVERLINE].status = IT_STRING | IT_CALL;
 	}
@@ -8726,8 +8942,7 @@ static void M_DrawServerLines(INT32 x, INT32 page)
 static void M_DrawConnectMenu(void)
 {
 	UINT16 i;
-	INT32 numPages = (serverlistcount+(SERVERS_PER_PAGE-1))/SERVERS_PER_PAGE;
-	INT32 mservflags = V_ALLOWLOWERCASE;
+	INT32 numPages = (serverlistcount + (SERVERS_PER_PAGE - 1)) / SERVERS_PER_PAGE;
 
 	for (i = FIRSTSERVERLINE; i < min(localservercount, SERVERS_PER_PAGE)+FIRSTSERVERLINE; i++)
 		MP_ConnectMenu[i].status = IT_STRING | IT_SPACE;
@@ -8736,25 +8951,23 @@ static void M_DrawConnectMenu(void)
 		numPages = 1;
 
 	// Page num
-	V_DrawRightAlignedString(BASEVIDWIDTH - currentMenu->x, currentMenu->y + MP_ConnectMenu[mp_connect_page].alphaKey,
-	                         highlightflags, va("%u of %d", serverlistpage+1, numPages));
+	V_DrawRightAlignedString(BASEVIDWIDTH - currentMenu->x, currentMenu->y + MP_ConnectMenu[mp_connect_page].alphaKey, highlightflags, va("%u / %d", serverlistpage+1, numPages));
 
-	// Did you change the Server Browser address? Have a little reminder.
-	if (CV_IsSetToDefault(&cv_masterserver))
-		mservflags = mservflags|highlightflags|V_30TRANS;
-	else
-		mservflags = mservflags|warningflags;
-	V_DrawRightAlignedSmallString(BASEVIDWIDTH - currentMenu->x, currentMenu->y+3 + MP_ConnectMenu[mp_connect_refresh].alphaKey,
-	                         mservflags, va("MS: %s", cv_masterserver.string));
+	if (itemOn == 1)
+	{
+		V_DrawCharacter(((310 - currentMenu->x) - V_StringWidth(va("%u / %d", serverlistpage+1, numPages), 0)) - (skullAnimCounter / 5), currentMenu->y + MP_ConnectMenu[mp_connect_page].alphaKey, '\x1C' | highlightflags, true);
+		V_DrawCharacter((322 - currentMenu->x) + (skullAnimCounter / 5), currentMenu->y + MP_ConnectMenu[mp_connect_page].alphaKey, '\x1D' | highlightflags, true);
+	}
 
 	M_DrawServerCountAndHorizontalBar();
+	M_DrawServerPageInfo();
 
 	// When switching pages, slide the old page and the
 	// new page across the screen
 	if (oldserverlistpage != serverlistpage)
 	{
 		const float ease = serverlistslidex / 2.f;
-		const INT32 offx = serverlistslidex > 0 ? BASEVIDWIDTH : -(BASEVIDWIDTH);
+		const INT32 offx = (serverlistslidex > 0) ? SCALEDVIEWWIDTH : -(SCALEDVIEWWIDTH);
 		const INT32 x = (FLOAT_TO_FIXED(serverlistslidex) + ease * rendertimefrac) / FRACUNIT;
 
 		M_DrawServerLines(currentMenu->x + x - offx, oldserverlistpage);
@@ -8778,11 +8991,204 @@ static void M_DrawConnectMenu(void)
 	M_DrawGenericMenu();
 }
 
+static void M_DrawSelectedServerAddons(UINT8 current_file, INT32 y)
+{
+	INT32 fy = (y + 35);
+	UINT8 i = 0;
+
+	if (current_file)
+		V_DrawCharacter(9, (y + 37) - (skullAnimCounter / 5), '\x1A' | highlightflags, false);
+
+	while (i++ < filelist_maxfiles)
+	{
+		if (current_file)
+		{
+			current_file--;
+			continue;
+		}
+
+		V_DrawThinString(32, fy, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("File #\x83%d", i));
+		V_DrawRightAlignedThinString(BASEVIDWIDTH - 32, fy, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("%d\x82%s", 32, "MB"));
+		
+		fy += 10;
+
+		if (fy >= 165)
+			goto bottomarrow;
+	}
+
+bottomarrow:
+	if (filelist_itemon < (filelist_maxfiles - 12))
+		V_DrawCharacter(9, (y + 144) + (skullAnimCounter / 5), '\x1B' | highlightflags, false);
+}
+
+static void M_DrawServerInformation(void)
+{
+	serverinfo_pak *info = &serverlist[SERVERNODE(selected_server)].info;
+	INT32 global_ypos = 12, box_width = 268;
+	
+	const char *level_name = va("%sP", info->mapname);
+	patch_t *level_patch = W_LumpExists(level_name) ? W_CachePatchName(level_name, PU_CACHE) : W_CachePatchName("RANDOMLV", PU_CACHE);
+
+	//
+
+	V_DrawFill(160 - (box_width / 2), global_ypos, box_width, 158, 239);
+	V_DrawCenteredString(160, global_ypos + 4, V_ALLOWLOWERCASE, info->servername);
+
+	if (connectmenu_showfiles)
+		goto filedraw;
+
+	//
+
+	V_DrawSmallScaledPatch(32, global_ypos + 17, 0, level_patch);
+	V_DrawThinString(117, global_ypos + 19, V_ALLOWLOWERCASE | V_6WIDTHSPACE, info->maptitle);
+
+	//
+
+	V_DrawSmallString(117, global_ypos + 29, V_ALLOWLOWERCASE | ((info->gametype == GT_RACE) ? V_SKYMAP : V_REDMAP), Gametype_Names[info->gametype]);
+
+	if (info->gametype == GT_RACE)
+		V_DrawSmallString(117 + 16, global_ypos + 29, V_ALLOWLOWERCASE, va(" - %s Speed", kartspeed_cons_t[info->kartvars & SV_SPEEDMASK].strvalue));
+
+	//
+
+	if (info->cheatsenabled)
+		V_DrawSmallString(117, global_ypos + 34, V_ALLOWLOWERCASE | V_GREENMAP, "Cheats");
+
+	if (info->modifiedgame)
+	{
+		V_DrawThinString(117, global_ypos + 51, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("\x82%d\x80 Addon%s loaded.", info->fileneedednum, (info->fileneedednum == 1) ? "" : "s"));
+		V_DrawSmallString(117, global_ypos + 61, V_ALLOWLOWERCASE, va("%s\x80 downloading available.", (info->httpsource[0]) ? "\x88""HTTP" : "\x85""Direct"));
+	}
+	else
+		V_DrawThinString(117, global_ypos + 56, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("%cVanilla %cNetgame.", 0x88, 0x80));
+
+	//
+
+	V_DrawFill(160 - (box_width / 2), global_ypos + 72, box_width, 15, 29);
+
+	V_DrawThinString(32, global_ypos + 75, V_ALLOWLOWERCASE | V_6WIDTHSPACE, "Players in the server:");
+	V_DrawRightAlignedThinString(BASEVIDWIDTH - 32, global_ypos + 75, V_6WIDTHSPACE, va("%c%d\x80/%d", (info->numberofplayer >= info->maxplayer) ? 0x85 : 0x82, info->numberofplayer, info->maxplayer));
+
+	if (!info->numberofplayer)
+	{
+		V_DrawCenteredThinString(160, global_ypos + 90, V_GRAYMAP | V_ALLOWLOWERCASE | V_6WIDTHSPACE, "No players found.");
+		V_DrawCenteredSmallString(160, global_ypos + 100, V_ALLOWLOWERCASE | V_YELLOWMAP, "You can be the first one!");
+	}
+	else
+	{
+		INT32 px = 32, py = (global_ypos + 90);
+		INT32 i;
+
+		for (i = 0; i < info->numberofplayer; i++)
+		{
+			V_DrawThinString(px, py, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("Player %d", i));
+			py += 11;
+
+			if (i == 5 || i == 11)
+			{
+				px += 92;
+				py = (global_ypos + 90);
+			}
+		}
+	}
+
+	//
+
+filedraw:
+	if (connectmenu_showfiles)
+	{
+		V_DrawFill(160 - (box_width / 2), global_ypos + 17, box_width, 15, 29);
+		V_DrawThinString(32, global_ypos + 20, V_ALLOWLOWERCASE | V_6WIDTHSPACE, "Currently loaded addons:");
+	
+		M_DrawSelectedServerAddons(filelist_itemon, global_ypos);
+	}
+
+	//
+
+	V_DrawFill(160 - (box_width / 2), global_ypos + 165, box_width, 15, 239);
+
+	V_DrawThinString(32, global_ypos + 168, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("Go Back. [%cESC%c]", 0x82, 0x80));
+	V_DrawCenteredThinString(160, global_ypos + 168, (info->modifiedgame ? 0 : V_TRANSLUCENT) | V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("Show %s... [%cTAB%c]", (connectmenu_showfiles) ? "players" : "addons", 0x82, 0x80));
+	V_DrawRightAlignedThinString(BASEVIDWIDTH - 32, global_ypos + 168, V_ALLOWLOWERCASE | V_6WIDTHSPACE, va("Join. [%cEnter%c]", 0x82, 0x80));
+}
+
+static void M_HandlePreConnect(INT32 choice)
+{
+	boolean exitmenu = false; // exit to previous menu
+	serverinfo_pak *info = &serverlist[SERVERNODE(selected_server)].info; // get current menu things
+
+	switch (choice)
+	{
+		case KEY_ESCAPE:
+			exitmenu = true;
+			break;
+
+		case KEY_TAB:
+			if (info->modifiedgame)
+			{
+				connectmenu_showfiles = !connectmenu_showfiles;
+				S_StartSound(NULL, sfx_s257);
+			}
+			else
+				S_StartSound(NULL, sfx_s3kb2);
+
+			break;
+
+		case KEY_UPARROW:
+			if (connectmenu_showfiles)
+				if (filelist_itemon)
+				{
+					S_StartSound(NULL, sfx_menu1);
+					filelist_itemon--;
+				}
+			break;
+
+		case KEY_DOWNARROW:
+			if (connectmenu_showfiles)
+				if (filelist_itemon < (filelist_maxfiles - 12))
+				{
+					S_StartSound(NULL, sfx_menu1);
+					filelist_itemon++;
+				}
+			break;
+
+		case KEY_ENTER:
+			M_Connect(-1);
+			S_StartSound(NULL, sfx_s1a1);
+			break;
+
+		default:
+			break;
+	}
+	
+	if (exitmenu)
+	{
+		if (currentMenu->prevMenu)
+			M_SetupNextMenu(currentMenu->prevMenu);
+		else
+			M_ClearMenus(true);
+	}
+}
+
 static boolean M_CancelConnect(void)
 {
-	D_CloseConnection();
+	if (isquitting_serverlist)
+		D_CloseConnection();
 	return true;
 }
+
+static boolean M_QuitPreConnectMenu(void)
+{
+	canshow_serverlist = isquitting_serverlist = false;
+
+	M_ClearMenus(false);
+	D_QuitNetGame();
+	CL_Reset();
+	D_StartTitle();
+	return true;
+}
+
+#undef SERVERNODE
 
 // Ascending order, not descending.
 // The casts are safe as long as the caller doesn't do anything stupid.
@@ -9005,6 +9411,7 @@ static void M_PreConnectMenu(INT32 choice)
 		return;
 	}
 
+	strcpy(selectedtip, servertips[M_RandomKey(MAXSERVERTIPS)]);
 	M_ConnectMenuModChecks(-1);
 }
 
@@ -9235,7 +9642,7 @@ static void M_DrawServerMenu(void)
 	M_DrawLevelSelectOnly(false, false);
 	if (currentMenu == &MP_ServerDef && cv_advertise.value) // Remind players where they're hosting.
 	{
-		int mservflags = V_ALLOWLOWERCASE;
+		int mservflags = V_ALLOWLOWERCASE|V_6WIDTHSPACE;
 		if (CV_IsSetToDefault(&cv_masterserver))
 			mservflags = mservflags|highlightflags|V_30TRANS;
 		else
@@ -9299,12 +9706,12 @@ static void M_DrawMPMainMenu(void)
 Update the maxplayers label...
 #endif
 	V_DrawRightAlignedString(BASEVIDWIDTH-x, y+MP_MainMenu[4].alphaKey,
-		((itemOn == 4) ? highlightflags : 0), "(2-16 players)");
+		((itemOn == 4) ? highlightflags : 0)|V_ALLOWLOWERCASE, "(2-16 Players)");
 #endif
 
 	V_DrawRightAlignedString(BASEVIDWIDTH-x, y+MP_MainMenu[5].alphaKey,
-		((itemOn == 5) ? highlightflags : 0),
-		"(2-4 players)"
+		((itemOn == 5) ? highlightflags : 0)|V_ALLOWLOWERCASE,
+		"(2-4 Players)"
 		);
 
 #ifndef NONET
@@ -9578,344 +9985,703 @@ static player_t  *setupm_player;
 static consvar_t *setupm_cvskin;
 static consvar_t *setupm_cvcolor;
 static consvar_t *setupm_cvname;
+static UINT8      setupm_skinxpos;
 static INT32      setupm_fakeskin;
 static INT32      setupm_fakecolor;
 
-static void M_DrawSetupMultiPlayerMenu(void)
+// variables used for the grid
+static UINT8 setupm_skinypos;
+static INT32 setupm_skinselect;
+static boolean setupm_skinlockedselect;
+static boolean setupm_returntoskingridonback;
+
+#define SELECTEDSTATSCOUNT skinstatscount[setupm_skinxpos][setupm_skinypos]
+#define LASTSELECTEDSTAT skinstats[setupm_skinxpos][setupm_skinypos][skinstatscount[setupm_skinxpos][setupm_skinypos]]
+
+#define SKINGRIDWIDTH 8
+#define SKINGRIDHEIGHT 6
+
+// Skin select menu drawing functions
+
+static void MPSetup_DrawMenuLabels(void)
 {
-	INT32 mx, my, st, flags = 0;
-	spritedef_t *sprdef;
-	spriteframe_t *sprframe;
-	patch_t *statbg = W_CachePatchName("K_STATBG", PU_CACHE);
-	patch_t *statlr = W_CachePatchName("K_STATLR", PU_CACHE);
-	patch_t *statud = W_CachePatchName("K_STATUD", PU_CACHE);
-	patch_t *statdot = W_CachePatchName("K_SDOT0", PU_CACHE);
-	patch_t *patch;
-	UINT8 frame;
-	UINT8 speed;
-	UINT8 weight;
-	UINT8 i;
-	const UINT8 *flashcol = V_GetStringColormap(highlightflags);
-	INT32 statx, staty;
+	patch_t *menu_icon = W_CachePatchName("M_CURSOR", PU_CACHE);
 
-	mx = MP_PlayerSetupDef.x;
-	my = MP_PlayerSetupDef.y;
+	for (INT32 i = 0; i < MPPLAYERSETUPITEM_MAX; i++)
+	{
+		INT32 text_flags = 0;
+		INT32 label_x = MP_PlayerSetupMenu_XPositions[i];
+		INT32 label_y = MP_PlayerSetupMenu[i].alphaKey;
+		const char *label = MP_PlayerSetupMenu[i].text;
 
-	statx = (BASEVIDWIDTH - mx - 118);
-	staty = (my+62);
+		// Draw the cursor and highlight label when selected.
+		if (i == itemOn)
+		{
+			text_flags = highlightflags;
+			V_DrawScaledPatch(6, label_y, 0, menu_icon);
+		}
 
-	// use generic drawer for cursor, items and title
-	M_DrawGenericMenu();
+		if (MP_PlayerSetupMenu[i].status & IT_TRANSTEXT)
+			text_flags |= V_TRANSLUCENT;
 
+		// Draw the label for the option.
+		V_DrawCenteredString(label_x, label_y, text_flags | V_ALLOWLOWERCASE, label);
+	}
+}
+
+/**
+ * @brief Draws the name entry box.
+ */
+static void MPSetup_DrawNameEntry(INT32 mx, INT32 my)
+{
 	// draw name string
-	M_DrawTextBox(mx + 32, my - 8, MAXPLAYERNAME, 1);
-	V_DrawString(mx + 40, my, V_ALLOWLOWERCASE, setupm_name);
+	M_DrawTextBox(mx, my - 8, MAXPLAYERNAME + 4, 1);
+	V_DrawString(mx + 8, my, V_ALLOWLOWERCASE, setupm_name);
 
 	// draw text cursor for name
-	if (!itemOn && skullAnimCounter < 4) // blink cursor
-		V_DrawCharacter(mx + 40 + V_StringWidth(setupm_name, V_ALLOWLOWERCASE), my, '_',false);
+	if (itemOn == 0 && skullAnimCounter < 4 && strlen(setupm_name) < MAXPLAYERNAME) // blink cursor
+		V_DrawCharacter(mx + 8 + V_StringWidth(setupm_name, V_ALLOWLOWERCASE), my, '_', false);
+}
 
-	// draw skin string
-	st = V_StringWidth(skins[setupm_fakeskin].realname, 0);
-	V_DrawString(BASEVIDWIDTH - mx - st, my + 16,
-	             ((MP_PlayerSetupMenu[2].status & IT_TYPE) == IT_SPACE ? V_TRANSLUCENT : 0)|highlightflags|V_ALLOWLOWERCASE,
-	             skins[setupm_fakeskin].realname);
-	if (itemOn == 1)
+/**
+ * @brief Draws the Grid of skins.
+ */
+static void MPSetup_DrawCharacterGrid(INT32 mx, INT32 my)
+{
+#define GRID_X_SHIFT 15
+#define GRID_Y_SHIFT 1
+#define GRID_WIDTH_HEIGHT ((9 * 17) + 4)
+
+	// Draw the background
+	V_DrawScaledPatch(mx + GRID_X_SHIFT - 16, my + GRID_Y_SHIFT - 16, 0, W_CachePatchName("K_VSTATBG", PU_CACHE));
+
+	// Draw the faces
+	for (INT32 speed = 0; speed < MAXSTAT; speed++)
 	{
-		V_DrawCharacter(BASEVIDWIDTH - mx - 10 - st - (skullAnimCounter/5), my + 16,
-			'\x1C' | highlightflags, false); // left arrow
-		V_DrawCharacter(BASEVIDWIDTH - mx + 2 + (skullAnimCounter/5), my + 16,
-			'\x1D' | highlightflags, false); // right arrow
-	}
-
-	// draw the name of the color you have chosen
-	// Just so people don't go thinking that "Default" is Green.
-	st = V_StringWidth(KartColor_Names[setupm_fakecolor], 0);
-	V_DrawString(BASEVIDWIDTH - mx - st, my + 152, highlightflags|V_ALLOWLOWERCASE, KartColor_Names[setupm_fakecolor]);	// SRB2kart
-	if (itemOn == 2)
-	{
-		V_DrawCharacter(BASEVIDWIDTH - mx - 10 - st - (skullAnimCounter/5), my + 152,
-			'\x1C' | highlightflags, false); // left arrow
-		V_DrawCharacter(BASEVIDWIDTH - mx + 2 + (skullAnimCounter/5), my + 152,
-			'\x1D' | highlightflags, false); // right arrow
-	}
-
-	// SRB2Kart: draw the stat backer
-	// labels
-	V_DrawThinString(statx+16, staty, V_6WIDTHSPACE|highlightflags, "Acceleration");
-	V_DrawThinString(statx+91, staty, V_6WIDTHSPACE|highlightflags, "Max Speed");
-	V_DrawThinString(statx, staty+12, V_6WIDTHSPACE|highlightflags, "Handling");
-	V_DrawThinString(statx+7, staty+77, V_6WIDTHSPACE|highlightflags, "Weight");
-	// label arrows
-	V_DrawFixedPatch((statx+64)<<FRACBITS, staty<<FRACBITS, FRACUNIT, 0, statlr, flashcol);
-	V_DrawFixedPatch((statx+24)<<FRACBITS, (staty+22)<<FRACBITS, FRACUNIT, 0, statud, flashcol);
-	// bg
-	V_DrawFixedPatch((statx+34)<<FRACBITS, (staty+10)<<FRACBITS, FRACUNIT, 0, statbg, 0);
-
-	for (i = 0; i < numskins; i++) // draw the stat dots
-	{
-		if (i != setupm_fakeskin && R_SkinAvailable(skins[i].name) != -1)
+		for (INT32 weight = 0; weight < MAXSTAT; weight++)
 		{
-			speed = skins[i].kartspeed;
-			weight = skins[i].kartweight;
-			V_DrawFixedPatch(((BASEVIDWIDTH - mx - 80) + ((speed-1)*8))<<FRACBITS, ((my+76) + ((weight-1)*8))<<FRACBITS, FRACUNIT, 0, statdot, NULL);
+			INT32 x = ((speed * 17) + mx + GRID_X_SHIFT + (speed / 3) * 2);
+			INT32 y = ((weight * 17) + my + GRID_Y_SHIFT + (weight / 3) * 2);
+			INT32 skin_index;
+			patch_t *face;
+			UINT8 *cmap;
+
+			if (skinstatscount[speed][weight] == 0)
+				continue;
+
+			skin_index = skinstats[speed][weight][0];
+			face = facerankprefix[skin_index];
+			cmap = R_GetTranslationColormap(skin_index, skins[skin_index].prefcolor, GTC_MENUCACHE);
+
+			V_DrawMappedPatch(x, y, 0, face, cmap);
+
+			// draw a dot if there's more than 1 skin in this slot
+			if (skinstatscount[speed][weight] > 1)
+			{
+				skincolors_t echo_color = SKINCOLOR_KSUPER1 + abs( (signed) ( (unsigned) (I_GetTime() >> 1) % 9) - 4);
+				V_DrawMappedPatch(x + 12, y + 12, 0, W_CachePatchName("K_ECHOID", PU_CACHE), R_GetTranslationColormap(TC_DEFAULT, echo_color, GTC_MENUCACHE));
+			}
 		}
 	}
 
-	speed = skins[setupm_fakeskin].kartspeed;
-	weight = skins[setupm_fakeskin].kartweight;
-
-	statdot = W_CachePatchName("K_SDOT1", PU_CACHE);
-	if (skullAnimCounter < 4) // SRB2Kart: we draw this dot later so that it's not covered if there's multiple skins with the same stats
-		V_DrawFixedPatch(((BASEVIDWIDTH - mx - 80) + ((speed-1)*8))<<FRACBITS, ((my+76) + ((weight-1)*8))<<FRACBITS, FRACUNIT, 0, statdot, flashcol);
-	else
-		V_DrawFixedPatch(((BASEVIDWIDTH - mx - 80) + ((speed-1)*8))<<FRACBITS, ((my+76) + ((weight-1)*8))<<FRACBITS, FRACUNIT, 0, statdot, NULL);
-
-	statdot = W_CachePatchName("K_SDOT2", PU_CACHE); // coloured center
-	if (setupm_fakecolor)
-		V_DrawFixedPatch(((BASEVIDWIDTH - mx - 80) + ((speed-1)*8))<<FRACBITS, ((my+76) + ((weight-1)*8))<<FRACBITS, FRACUNIT, 0, statdot, R_GetTranslationColormap(0, setupm_fakecolor, GTC_MENUCACHE));
-
-	// 2.2 color bar backported with permission
-#define charw 72
-#define indexwidth 8
+	if (itemOn == 1 && !setupm_skinlockedselect) // has to be on skin select part
 	{
-		const INT32 colwidth = ((BASEVIDWIDTH-(2*mx))-charw)/(2*indexwidth);
-		INT32 j = -colwidth;
-		INT16 col = setupm_fakecolor - colwidth;
-		INT32 x = mx;
-		INT32 w = indexwidth;
-		UINT8 h;
-
-		while (col < 1)
-			col += MAXSKINCOLORS-1;
-		while (j <= colwidth)
-		{
-			if (!(j++))
-				w = charw;
-			else
-				w = indexwidth;
-			for (h = 0; h < 16; h++)
-				V_DrawFill(x, my+162+h, w, 1, colortranslations[col][h]);
-			if (++col >= MAXSKINCOLORS)
-				col -= MAXSKINCOLORS-1;
-			x += w;
-		}
-	}
-#undef indexwidth
-
-	// character bar, ripped off the color bar :V
-	if (setupm_fakecolor) // inverse should never happen
-#define iconwidth 32
-	{
-		const INT32 icons = 4;
-		INT32 k = -icons;
-		INT16 col = setupm_fakeskin - icons;
-		INT32 x = BASEVIDWIDTH/2 - ((icons+1)*24) - 4;
-		fixed_t scale = FRACUNIT/2;
-		INT32 offx = 8, offy = 8;
 		patch_t *cursor;
-		static fixed_t cursorframe = 0;
-		patch_t *face;
-		UINT8 *colmap;
+		INT32 curx = ((setupm_skinxpos * 17) + mx + GRID_X_SHIFT + (setupm_skinxpos / 3) * 2);
+		INT32 cury = ((setupm_skinypos * 17) + my + GRID_Y_SHIFT + (setupm_skinypos / 3) * 2);
 
-		cursorframe += renderdeltatics / 4;
-		for (; cursorframe > 7 * FRACUNIT; cursorframe -= 7 * FRACUNIT) {}
-
-		cursor = W_CachePatchName(va("K_BHILI%d", (cursorframe >> FRACBITS) + 1), PU_CACHE);
-
-		if (col < 0)
-			col += numskins;
-		while (k <= icons)
+		if (skinstatscount[setupm_skinxpos][setupm_skinypos] > 0)
 		{
-			if (!(k++))
-			{
-				scale = FRACUNIT;
-				face = facewantprefix[col];
-				offx = 12;
-				offy = 0;
-			}
-			else
-			{
-				scale = FRACUNIT/2;
-				face = facerankprefix[col];
-				offx = 8;
-				offy = 8;
-			}
-			colmap =  R_GetTranslationColormap(col, setupm_fakecolor, GTC_MENUCACHE);
-			V_DrawFixedPatch((x+offx)<<FRACBITS, (my+28+offy)<<FRACBITS, FRACUNIT, 0, face, colmap);
-			if (scale == FRACUNIT) // bit of a hack
-				V_DrawFixedPatch((x+offx)<<FRACBITS, (my+28+offy)<<FRACBITS, FRACUNIT, 0, cursor, colmap);
-			if (++col >= numskins)
-				col -= numskins;
-			x += FixedMul(iconwidth<<FRACBITS, 3*scale/2)/FRACUNIT;
+			INT32 skin_index = skinstats[setupm_skinxpos][setupm_skinypos][0];
+			UINT8 *cmap = R_GetTranslationColormap(skin_index, setupm_fakecolor, GTC_MENUCACHE);
+
+			cursor = facewantprefix[skin_index];
+			V_DrawMappedPatch(((curx - 8)), ((cury - 8)), 0, cursor, cmap);
+
+			if (skinstatscount[setupm_skinxpos][setupm_skinypos] > 1)
+				V_DrawRightAlignedThinString(curx + 23, cury + 14, V_20TRANS|V_6WIDTHSPACE, va("+%d", skinstatscount[setupm_skinxpos][setupm_skinypos] - 1));
+		}
+		else
+		{
+			UINT8 cursorframe = (I_GetTime() / 4) % 7;
+
+			cursor = W_CachePatchName(va("K_CHILI%d", cursorframe + 1), PU_CACHE);
+			V_DrawScaledPatch(curx, cury, 0, cursor);
 		}
 	}
-#undef iconwidth
+}
+
+/**
+ * @brief Draws the menu for selecting an echo character.
+ */
+static void MPSetup_DrawEchoSelectMenu(INT32 mx, INT32 my)
+{
+// TODO: Add a bunch of defines to make this easier to edit.
+#define ECHO_CIRCLE_WIDTH 30
+#define ECHO_CIRCLE_HEIGHT 10
+#define ECHO_CIRCLE_Y_OFFSET 30
+#define ECHO_BACKGROUND_WIDTH 72
+#define ECHO_BACKGROUND_HEIGHT 84
+#define ECHO_GLOBAL_Y_OFFSET -10
+
+	if (setupm_skinlockedselect)
+	{
+		INT32 left_skin_count = (skinstatscount[setupm_skinxpos][setupm_skinypos] / 2) + (skinstatscount[setupm_skinxpos][setupm_skinypos] % 2);
+		INT32 right_skin_count = (skinstatscount[setupm_skinxpos][setupm_skinypos] / 2);
+
+		fixed_t rotation_value = (skinstatscount[setupm_skinxpos][setupm_skinypos] << FRACBITS) / 2;
+
+		char *str = NULL;
+		INT32 str_width = 0;
+
+		// Darken the skin selection grid.
+		V_DrawScaledPatch(mx + GRID_X_SHIFT - 16, my + GRID_Y_SHIFT - 16, V_40TRANS, W_CachePatchName("K_VSTATLW", PU_CACHE));
+
+		// Draw a background
+		V_DrawFill(mx - (ECHO_CIRCLE_WIDTH / 2) + (GRID_WIDTH_HEIGHT / 2) - (ECHO_BACKGROUND_WIDTH / 2),
+				   my - (ECHO_CIRCLE_HEIGHT / 2) + (GRID_WIDTH_HEIGHT / 2) - (ECHO_BACKGROUND_HEIGHT / 2) + ECHO_GLOBAL_Y_OFFSET,
+				   ECHO_BACKGROUND_WIDTH + (ECHO_CIRCLE_WIDTH * 2),
+				   ECHO_BACKGROUND_HEIGHT + (ECHO_CIRCLE_HEIGHT * 2) + 20, 239);
+
+		// Draw the current skin's name
+		str = skins[skinstats[setupm_skinxpos][setupm_skinypos][setupm_skinselect]].realname;
+		str_width = V_StringWidth(str, 0);
+
+		if (str_width > 72)
+		{
+			V_DrawCenteredThinString(mx + (ECHO_CIRCLE_WIDTH / 2) + (GRID_WIDTH_HEIGHT / 2),
+									 my + (ECHO_CIRCLE_HEIGHT / 2) + (GRID_WIDTH_HEIGHT / 2) - (ECHO_BACKGROUND_HEIGHT / 2) + ECHO_GLOBAL_Y_OFFSET + ECHO_BACKGROUND_HEIGHT + 9,
+									 highlightflags | V_ALLOWLOWERCASE | V_6WIDTHSPACE, str);
+			str_width = V_ThinStringWidth(str, V_6WIDTHSPACE);
+		}
+		else
+		{
+			V_DrawCenteredString(mx + (ECHO_CIRCLE_WIDTH / 2) + (GRID_WIDTH_HEIGHT / 2),
+								 my + (ECHO_CIRCLE_HEIGHT / 2) + (GRID_WIDTH_HEIGHT / 2) - (ECHO_BACKGROUND_HEIGHT / 2) + ECHO_GLOBAL_Y_OFFSET + ECHO_BACKGROUND_HEIGHT + 10,
+								 highlightflags | V_ALLOWLOWERCASE, str);
+		}
+
+		// Draw the left and right arrows
+		V_DrawCharacter(mx + (ECHO_CIRCLE_WIDTH / 2) + (GRID_WIDTH_HEIGHT / 2) - str_width / 2 - 10 - (skullAnimCounter / 5),
+						my + (ECHO_CIRCLE_HEIGHT / 2) + (GRID_WIDTH_HEIGHT / 2) - (ECHO_BACKGROUND_HEIGHT / 2) + ECHO_GLOBAL_Y_OFFSET + ECHO_BACKGROUND_HEIGHT + 10,
+						'\x1C', true);
+		V_DrawCharacter(mx + (ECHO_CIRCLE_WIDTH / 2) + (GRID_WIDTH_HEIGHT / 2) + str_width / 2 + 2 + (skullAnimCounter / 5),
+						my + (ECHO_CIRCLE_HEIGHT / 2) + (GRID_WIDTH_HEIGHT / 2) - (ECHO_BACKGROUND_HEIGHT / 2) + ECHO_GLOBAL_Y_OFFSET + ECHO_BACKGROUND_HEIGHT + 10,
+						'\x1D', true);
+
+		// Draw the a8 of each skin in the slot in a ring, hilighting the currently selected character.
+		// Right side
+		for (INT32 i = right_skin_count; i > 0; i--)
+		{
+			// Copied from the skin preview function below.
+
+			INT32 skinidx = (setupm_skinselect + i) % skinstatscount[setupm_skinxpos][setupm_skinypos];
+			INT32 skintodisplay = skinstats[setupm_skinxpos][setupm_skinypos][skinidx];
+			spritedef_t *sprdef = NULL;
+			spriteframe_t *sprframe = NULL;
+			patch_t *patch = NULL;
+			INT32 flags = 0;
+			UINT8 *cmap = NULL;
+
+			angle_t direction = FixedAngle(FixedMul(FixedDiv(i << FRACBITS, rotation_value), 180 << FRACBITS));
+			INT32 x_offset = FixedInt(FINESINE(direction >> ANGLETOFINESHIFT) * ECHO_CIRCLE_WIDTH);
+			INT32 y_offset = FixedInt(FINECOSINE(direction >> ANGLETOFINESHIFT) * ECHO_CIRCLE_HEIGHT);
+
+			INT32 x_pos = mx + GRID_X_SHIFT + (GRID_WIDTH_HEIGHT / 2) + x_offset;
+			INT32 y_pos = my + GRID_Y_SHIFT + (GRID_WIDTH_HEIGHT / 2) + y_offset + ECHO_CIRCLE_Y_OFFSET + ECHO_GLOBAL_Y_OFFSET;
+
+			if (R_SkinAvailable(skins[skintodisplay].name) != -1)
+				sprdef = &skins[R_SkinAvailable(skins[skintodisplay].name)].spritedef;
+			else
+			{
+				sprdef = &skins[0].spritedef;
+				skintodisplay = 0;
+			}
+
+			if (sprdef == NULL || sprdef->numframes <= 0) // No frames ??
+				return;									  // Can't render!
+
+			sprframe = &sprdef->spriteframes[0];
+			patch = W_CachePatchNum(sprframe->lumppat[7], PU_CACHE);
+			if (sprframe->flip & 0b10000000) // Only for first sprite (wait no this is the last sprite!)
+				flags |= V_FLIP;			 // This sprite is left/right flipped!
+
+			cmap = R_GetTranslationColormap(skintodisplay, skins[skintodisplay].prefcolor, GTC_MENUCACHE);
+
+			if (skins[skintodisplay].flags & SF_HIRES)
+			{
+				V_DrawFixedPatch(x_pos << FRACBITS, y_pos << FRACBITS,
+								 skins[skintodisplay].highresscale, flags | V_TRANSLUCENT, patch, cmap);
+			}
+			else
+				V_DrawMappedPatch(x_pos, y_pos, flags | V_TRANSLUCENT, patch, cmap);
+		}
+
+		// Left side
+		for (INT32 i = left_skin_count - 1; i >= 0; i--)
+		{
+			// Copied from the skin preview function below.
+
+			INT32 skinidx = setupm_skinselect - i;
+			INT32 skintodisplay = 0;
+			spritedef_t *sprdef = NULL;
+			spriteframe_t *sprframe = NULL;
+			patch_t *patch = NULL;
+			INT32 flags = 0;
+			UINT8 *cmap = NULL;
+
+			angle_t direction = FixedAngle(FixedMul(FixedDiv(-i << FRACBITS, rotation_value), 180 << FRACBITS));
+			INT32 x_offset = FixedInt(FINESINE(direction >> ANGLETOFINESHIFT) * ECHO_CIRCLE_WIDTH);
+			INT32 y_offset = FixedInt(FINECOSINE(direction >> ANGLETOFINESHIFT) * ECHO_CIRCLE_HEIGHT);
+
+			INT32 x_pos = mx + GRID_X_SHIFT + (GRID_WIDTH_HEIGHT / 2) + x_offset;
+			INT32 y_pos = my + GRID_Y_SHIFT + (GRID_WIDTH_HEIGHT / 2) + y_offset + ECHO_CIRCLE_Y_OFFSET + ECHO_GLOBAL_Y_OFFSET;
+
+			while (skinidx < 0)
+				skinidx += skinstatscount[setupm_skinxpos][setupm_skinypos];
+
+			skintodisplay = skinstats[setupm_skinxpos][setupm_skinypos][skinidx];
+
+			if (R_SkinAvailable(skins[skintodisplay].name) != -1)
+				sprdef = &skins[R_SkinAvailable(skins[skintodisplay].name)].spritedef;
+			else
+			{
+				sprdef = &skins[0].spritedef;
+				skintodisplay = 0;
+			}
+
+			if (sprdef == NULL || sprdef->numframes <= 0) // No frames ??
+				return;									  // Can't render!
+
+			sprframe = &sprdef->spriteframes[0];
+			patch = W_CachePatchNum(sprframe->lumppat[7], PU_CACHE);
+			if (sprframe->flip & 0b10000000) // Only for first sprite (wait no this is the last sprite!)
+				flags |= V_FLIP;			 // This sprite is left/right flipped!
+
+			cmap = R_GetTranslationColormap(skintodisplay, skins[skintodisplay].prefcolor, GTC_MENUCACHE);
+
+			if (i != 0)
+				flags |= V_TRANSLUCENT;
+
+			if (skins[skintodisplay].flags & SF_HIRES)
+			{
+				V_DrawFixedPatch(x_pos << FRACBITS, y_pos << FRACBITS,
+								 skins[skintodisplay].highresscale, flags, patch, cmap);
+			}
+			else
+				V_DrawMappedPatch(x_pos, y_pos, flags, patch, cmap);
+		}
+	}
+}
+
+/**
+ * @brief Draws the name of the currently selected skin.
+ */
+static void MPSetup_DrawSkinNameString(INT32 mx, INT32 my)
+{
+	// draw skin string
+	INT32 skintodisplay = setupm_fakeskin;
+	UINT32 text_flags = 0;
+
+	if (MP_PlayerSetupMenu[1].status & IT_TRANSTEXT)
+		text_flags |= V_TRANSLUCENT;
+
+	if (V_StringWidth(skins[skintodisplay].realname, V_ALLOWLOWERCASE) > 72)
+		V_DrawCenteredThinString(mx, my + 9,
+									 ((MP_PlayerSetupMenu[2].status & IT_TYPE) == IT_SPACE ? V_TRANSLUCENT : 0) | highlightflags | V_ALLOWLOWERCASE | V_6WIDTHSPACE,
+									 skins[skintodisplay].realname);
+	else
+		V_DrawCenteredString(mx, my + 10,
+								 ((MP_PlayerSetupMenu[2].status & IT_TYPE) == IT_SPACE ? V_TRANSLUCENT : 0) | highlightflags | V_ALLOWLOWERCASE,
+								 skins[skintodisplay].realname);
+}
+
+/**
+ * @brief Draws the current selected skin with a background. (It also spins!)
+ */
+static void MPSetup_DrawSkinSpritePreview(INT32 mx, INT32 my)
+{
+#define CHAR_WIDTH 72
+#define X_OFFSET 0
+	INT32 flags = 0;
+	INT32 spinframe = 0;
+
+	spritedef_t *sprdef;
+	spriteframe_t *sprframe;
+	patch_t *patch;
 
 	// anim the player in the box
 	multi_tics -= renderdeltatics;
 	while (multi_tics <= 0)
 	{
-		st = multi_state->nextstate;
+		INT32 st = multi_state->nextstate;
 		if (st != S_NULL)
 			multi_state = &states[st];
 
 		if (multi_state->tics <= -1)
-			multi_tics += 15*FRACUNIT;
+			multi_tics += 15 * FRACUNIT;
 		else
 			multi_tics += multi_state->tics * FRACUNIT;
 	}
 
 	// skin 0 is default player sprite
-	if (R_SkinAvailable(skins[setupm_fakeskin].name) != -1)
-		sprdef = &skins[R_SkinAvailable(skins[setupm_fakeskin].name)].spritedef;
+
+	sprdef = NULL;
+	INT32 skintodisplay = 0;
+
+	skintodisplay = setupm_fakeskin;
+
+	if (R_SkinAvailable(skins[skintodisplay].name) != -1)
+		sprdef = &skins[R_SkinAvailable(skins[skintodisplay].name)].spritedef;
 	else
+	{
 		sprdef = &skins[0].spritedef;
+		skintodisplay = 0;
+	}
 
-	if (!sprdef->numframes) // No frames ??
-		return; // Can't render!
+	if (sprdef == NULL || sprdef->numframes <= 0) // No frames ??
+		return;									  // Can't render!
 
-	frame = multi_state->frame & FF_FRAMEMASK;
+	UINT32 frame = multi_state->frame & FF_FRAMEMASK;
 	if (frame >= sprdef->numframes) // Walking animation missing
-		frame = 0; // Try to use standing frame
+		frame = 0;					// Try to use standing frame
 
+	spinframe = (((I_GetTime() * 3) / TICRATE) + 1) % 8;
 	sprframe = &sprdef->spriteframes[frame];
-	patch = W_CachePatchNum(sprframe->lumppat[1], PU_CACHE);
-	if (sprframe->flip & 1) // Only for first sprite
-		flags |= V_FLIP; // This sprite is left/right flipped!
+
+	patch = W_CachePatchNum(sprframe->lumppat[spinframe], PU_CACHE);
+	if ((sprframe->lumppat[spinframe] == sprframe->lumppat[8 - spinframe]) && (spinframe > 4))
+		flags = V_FLIP;	// This sprite is left/right flipped!
 
 	// draw box around guy
-	V_DrawFill(mx + 43 - (charw/2), my+65, charw, 84, 239);
+	V_DrawFill(mx - CHAR_WIDTH + X_OFFSET, my + 22, CHAR_WIDTH, 84, 239);
 
 	// draw player sprite
 	if (setupm_fakecolor) // inverse should never happen
 	{
-		UINT8 *colormap = R_GetTranslationColormap(setupm_fakeskin, setupm_fakecolor, GTC_MENUCACHE);
+		UINT8 *colormap = R_GetTranslationColormap(skintodisplay, setupm_fakecolor, GTC_MENUCACHE);
 
-		if (skins[setupm_fakeskin].flags & SF_HIRES)
+		if (skins[skintodisplay].flags & SF_HIRES)
 		{
-			V_DrawFixedPatch((mx+43)<<FRACBITS,
-						(my+131)<<FRACBITS,
-						skins[setupm_fakeskin].highresscale,
-						flags, patch, colormap);
+			V_DrawFixedPatch((mx - (CHAR_WIDTH / 2) + X_OFFSET) << FRACBITS,
+							 (my + 65 + 23) << FRACBITS,
+							 skins[skintodisplay].highresscale,
+							 flags, patch, colormap);
 		}
 		else
-			V_DrawMappedPatch(mx+43, my+131, flags, patch, colormap);
+			V_DrawMappedPatch(mx - (CHAR_WIDTH / 2) + X_OFFSET, my + 65 + 23, flags, patch, colormap);
 	}
+#undef CHAR_WIDTH
+#undef X_OFFSET
+}
+
+/**
+ * @brief Draws the color bar for color selection.
+ */
+static void MPSetup_DrawColorBar(INT32 mx, INT32 my)
+{
+#define indexwidth 8
+#define charw 24
+#define X_OFFSET -86
+	const INT32 color_index_max = (96 - charw) / (2 * indexwidth);
+	INT16 color_to_draw = setupm_fakecolor - color_index_max;
+	INT32 current_x = mx + X_OFFSET;
+	INT32 height_to_draw = 0;
+
+	while (color_to_draw < 1)
+		color_to_draw += MAXSKINCOLORS - 1;
+
+	for (INT32 color_index = -color_index_max; color_index <= color_index_max; color_index++)
+	{
+		if (color_index == 0)
+			height_to_draw = charw;
+		else
+			height_to_draw = indexwidth;
+
+		for (UINT8 shade = 0; shade < 16; shade++)
+			V_DrawFill(current_x + 2, my + shade - 18, height_to_draw, 1, colortranslations[color_to_draw][shade]);
+
+		if (++color_to_draw >= MAXSKINCOLORS)
+			color_to_draw -= MAXSKINCOLORS - 1;
+
+		current_x += height_to_draw;
+	}
+#undef indexwidth
 #undef charw
+#undef X_OFFSET
+}
+
+/**
+ * @brief Draws the name of the skin color that is currently selected.
+ */
+static void MPSetup_DrawColorNameString(INT32 mx, INT32 my)
+{
+	INT32 str_width = V_StringWidth(KartColor_Names[setupm_fakecolor], V_ALLOWLOWERCASE);
+	boolean thin = false;
+
+	if (str_width > 72)
+	{
+		str_width = V_ThinStringWidth(KartColor_Names[setupm_fakecolor], V_ALLOWLOWERCASE | V_6WIDTHSPACE);
+		thin = true;
+	}
+
+	str_width /= 2;
+
+	if (itemOn == MPPLAYERSETUPITEM_COLOR)
+	{
+		if (setupm_fakecolor != skins[setupm_fakeskin].prefcolor)
+			V_DrawCenteredThinString(mx, my + 20, V_ALLOWLOWERCASE | V_TRANSLUCENT | V_6WIDTHSPACE, va("[%cITEM%c] Skin Default", 0x82, 0x80));
+
+		// Draw the arrows!
+		V_DrawCharacter(mx - 10 - str_width - (skullAnimCounter / 5), my + 10, '\x1C', true); // Left
+		V_DrawCharacter(mx + 2 + str_width + (skullAnimCounter / 5), my + 10, '\x1D', true); // Right
+	}
+
+	// Draw the name of the color you have chosen.
+	if (thin)
+		V_DrawCenteredThinString(mx, my + 9, highlightflags | V_ALLOWLOWERCASE | V_6WIDTHSPACE, KartColor_Names[setupm_fakecolor]);
+	else
+		V_DrawCenteredString(mx, my + 10, highlightflags | V_ALLOWLOWERCASE, KartColor_Names[setupm_fakecolor]); // SRB2kart
+}
+
+static void M_DrawSetupMultiPlayerMenu(void)
+{
+	// Draw the labels
+	MPSetup_DrawMenuLabels();
+
+	// Name Entry
+	MPSetup_DrawNameEntry(MP_PlayerSetupMenu_XOffsets[MPPLAYERSETUPITEM_NAME], MP_PlayerSetupMenu[MPPLAYERSETUPITEM_NAME].alphaKey);
+
+	// Skin selection
+	MPSetup_DrawCharacterGrid(MP_PlayerSetupMenu_XOffsets[MPPLAYERSETUPITEM_CHARACTER], MP_PlayerSetupMenu[MPPLAYERSETUPITEM_CHARACTER].alphaKey);
+	MPSetup_DrawEchoSelectMenu(MP_PlayerSetupMenu_XOffsets[MPPLAYERSETUPITEM_CHARACTER], MP_PlayerSetupMenu[MPPLAYERSETUPITEM_CHARACTER].alphaKey);
+	MPSetup_DrawSkinNameString(MP_PlayerSetupMenu_XPositions[MPPLAYERSETUPITEM_CHARACTER], MP_PlayerSetupMenu[MPPLAYERSETUPITEM_CHARACTER].alphaKey);
+	MPSetup_DrawSkinSpritePreview(MPPLAYERSETUPITEM_PREVIEW, MP_PlayerSetupMenu[MPPLAYERSETUPITEM_CHARACTER].alphaKey);
+
+	// 2.2 color bar backported with permission
+	MPSetup_DrawColorBar(MP_PlayerSetupMenu_XOffsets[MPPLAYERSETUPITEM_COLOR], MP_PlayerSetupMenu[MPPLAYERSETUPITEM_COLOR].alphaKey);
+	MPSetup_DrawColorNameString(MP_PlayerSetupMenu_XPositions[MPPLAYERSETUPITEM_COLOR], MP_PlayerSetupMenu[MPPLAYERSETUPITEM_COLOR].alphaKey);
 }
 
 // Handle 1P/2P MP Setup
 static void M_HandleSetupMultiPlayer(INT32 choice)
 {
-	size_t   l;
-	boolean  exitmenu = false;  // exit to previous menu and send name change
+	size_t l;
+	boolean exitmenu = false; // exit to previous menu and send name change
 
 	if ((choice == gamecontrol[gc_fire][0] || choice == gamecontrol[gc_fire][1]) && itemOn == 2)
 		choice = KEY_BACKSPACE; // Hack to allow resetting prefcolor on controllers
 
 	switch (choice)
 	{
-		case KEY_DOWNARROW:
+	case KEY_DOWNARROW:
+		if (setupm_skinlockedselect)
+			break;
+		if (itemOn == MPPLAYERSETUPITEM_COLOR)
+			setupm_returntoskingridonback = false;
+		if (itemOn == 1 && setupm_skinypos < MAXSTAT - 1) // player skin
+			setupm_skinypos++;
+		else if (itemOn == 0)
+		{
+			setupm_skinypos = 0;
 			M_NextOpt();
-			S_StartSound(NULL,sfx_menu1); // Tails
-			break;
-
-		case KEY_UPARROW:
-			M_PrevOpt();
-			S_StartSound(NULL,sfx_menu1); // Tails
-			break;
-
-		case KEY_LEFTARROW:
-			if (itemOn == 1)       //player skin
-			{
-				S_StartSound(NULL,sfx_menu1); // Tails
-				setupm_fakeskin--;
-			}
-			else if (itemOn == 2) // player color
-			{
-				S_StartSound(NULL,sfx_menu1); // Tails
-				setupm_fakecolor--;
-			}
-			break;
-
-		case KEY_RIGHTARROW:
-			if (itemOn == 1)       //player skin
-			{
-				S_StartSound(NULL,sfx_menu1); // Tails
-				setupm_fakeskin++;
-			}
-			else if (itemOn == 2) // player color
-			{
-				S_StartSound(NULL,sfx_menu1); // Tails
-				setupm_fakecolor++;
-			}
-			break;
-
-		case KEY_ESCAPE:
-			exitmenu = true;
-			break;
-
-		case KEY_BACKSPACE:
-			if (itemOn == 0)
-			{
-				if ((l = strlen(setupm_name))!=0)
-				{
-					S_StartSound(NULL,sfx_menu1); // Tails
-					setupm_name[l-1] =0;
-				}
-			}
-			else if (itemOn == 2)
-			{
-				UINT8 col = skins[setupm_fakeskin].prefcolor;
-				if (setupm_fakecolor != col)
-				{
-					S_StartSound(NULL,sfx_menu1); // Tails
-					setupm_fakecolor = col;
-				}
-			}
-			break;
-
-		case KEY_DEL:
-			if (itemOn == 0 && (l = strlen(setupm_name))!=0)
-			{
-				S_StartSound(NULL,sfx_menu1); // Tails
-				setupm_name[0] = 0;
-			}
-			break;
-
-		default:
-			if (choice < 32 || choice > 127 || itemOn != 0)
-				break;
-			l = strlen(setupm_name);
-			if (l < MAXPLAYERNAME)
-			{
-				S_StartSound(NULL,sfx_menu1); // Tails
-				setupm_name[l] =(char)choice;
-				setupm_name[l+1] =0;
-			}
-			break;
-	}
-
-	// check skin
-	if (setupm_fakeskin < 0)
-		setupm_fakeskin = numskins-1;
-	if (setupm_fakeskin > numskins-1)
-		setupm_fakeskin = 0;
-
-	// check color
-	if (setupm_fakecolor < 1)
-		setupm_fakecolor = MAXSKINCOLORS-1;
-	if (setupm_fakecolor > MAXSKINCOLORS-1)
-		setupm_fakecolor = 1;
-
-	if (exitmenu)
-	{
-		if (currentMenu->prevMenu)
-			M_SetupNextMenu (currentMenu->prevMenu);
+		}
 		else
-			M_ClearMenus(true);
+			M_NextOpt();
+		S_StartSound(NULL, sfx_menu1); // Tails
+		break;
+
+	case KEY_UPARROW:
+		if (setupm_skinlockedselect)
+			break;
+		if (itemOn == MPPLAYERSETUPITEM_COLOR)
+			setupm_returntoskingridonback = false;
+		if (itemOn == 1 && setupm_skinypos > 0)
+			setupm_skinypos--;
+		else if (itemOn == 2)
+		{
+			setupm_skinypos = MAXSTAT - 1;
+			M_PrevOpt();
+		}
+		else
+			M_PrevOpt();
+		S_StartSound(NULL, sfx_menu1); // Tails
+		break;
+
+	case KEY_LEFTARROW:
+		if (itemOn == 1)
+		{
+			if (setupm_skinlockedselect)
+			{
+				if (setupm_skinselect > 0)
+					setupm_skinselect--;
+				else
+					setupm_skinselect = SELECTEDSTATSCOUNT - 1;
+				S_StartSound(NULL, sfx_menu1);
+			}
+			else // player skin
+			{
+				S_StartSound(NULL, sfx_menu1); // Tails
+				if (setupm_skinxpos > 0)
+					setupm_skinxpos--;
+				else
+					setupm_skinxpos = MAXSTAT - 1;
+			}
+		}
+		else if (itemOn == 2) // player color
+		{
+			S_StartSound(NULL, sfx_menu1); // Tails
+			setupm_fakecolor--;
+		}
+		break;
+
+	case KEY_RIGHTARROW:
+		if (itemOn == 1)
+		{
+			if (setupm_skinlockedselect)
+			{
+				if (setupm_skinselect < SELECTEDSTATSCOUNT - 1)
+					setupm_skinselect++;
+				else
+					setupm_skinselect = 0;
+				S_StartSound(NULL, sfx_menu1);
+			}
+			else // player skin
+			{
+				S_StartSound(NULL, sfx_menu1); // Tails
+				if (setupm_skinxpos < MAXSTAT - 1)
+					setupm_skinxpos++;
+				else
+					setupm_skinxpos = 0;
+			}
+		}
+		else if (itemOn == 2) // player color
+		{
+			S_StartSound(NULL, sfx_menu1); // Tails
+			setupm_fakecolor++;
+		}
+		break;
+
+	case KEY_ESCAPE:
+		if (setupm_skinlockedselect)
+		{
+			setupm_skinlockedselect = false;
+			break;
+		}
+		else if (setupm_returntoskingridonback)
+		{
+			setupm_returntoskingridonback = false;
+			M_PrevOpt();
+			break;
+		}
+		exitmenu = true;
+		break;
+
+	case KEY_BACKSPACE:
+		if (setupm_skinlockedselect)
+			break;
+		if (itemOn == 0)
+		{
+			if ((l = strlen(setupm_name)) != 0)
+			{
+				S_StartSound(NULL, sfx_menu1); // Tails
+				setupm_name[l - 1] = 0;
+			}
+		}
+		else if (itemOn == 2)
+		{
+			UINT8 col = skins[setupm_fakeskin].prefcolor;
+			if (setupm_fakecolor != col)
+			{
+				S_StartSound(NULL, sfx_menu1); // Tails
+				setupm_fakecolor = col;
+			}
+		}
+		break;
+
+	case KEY_DEL:
+		if (setupm_skinlockedselect)
+			break;
+		if (itemOn == 0 && (l = strlen(setupm_name)) != 0)
+		{
+			S_StartSound(NULL, sfx_menu1); // Tails
+			setupm_name[0] = 0;
+		}
+		break;
+
+	case KEY_ENTER:
+		if (setupm_skinlockedselect)
+		{
+			setupm_fakeskin = skinstats[setupm_skinxpos][setupm_skinypos][setupm_skinselect];
+			setupm_skinlockedselect = false;
+			S_StartSound(NULL, sfx_s221);
+			setupm_returntoskingridonback = true;
+			M_NextOpt();
+		}
+		else if (itemOn == 1 && (MP_PlayerSetupMenu[1].status & IT_GRAYEDOUT) == IT_GRAYEDOUT)
+		{
+			// Play a sound to tell the user they can't change skins right now.
+			S_StartSound(NULL, sfx_s26d);
+		}
+		else if (itemOn == 1 && SELECTEDSTATSCOUNT == 1)
+		{
+			setupm_fakeskin = skinstats[setupm_skinxpos][setupm_skinypos][0];
+			S_StartSound(NULL, sfx_s221);
+			setupm_returntoskingridonback = true;
+			M_NextOpt();
+		}
+		else if (itemOn == 1 && SELECTEDSTATSCOUNT > 1)
+		{
+			setupm_skinlockedselect = true;
+			setupm_skinselect = 0;
+			S_StartSound(NULL, sfx_menu1);
+		}
+		else if (itemOn == 0)
+		{
+			S_StartSound(NULL, sfx_menu1);
+			M_NextOpt();
+			setupm_skinxpos = skins[setupm_fakeskin].kartspeed - 1;
+			setupm_skinypos = skins[setupm_fakeskin].kartweight - 1;
+		}
+		else if (itemOn == 2)
+		{
+			S_StartSound(NULL, sfx_menu1);
+			exitmenu = true;
+		}
+		break;
+
+	default:
+		if (choice < 32 || choice > 127 || itemOn != 0)
+			break;
+		l = strlen(setupm_name);
+		if (l < MAXPLAYERNAME)
+		{
+			S_StartSound(NULL, sfx_menu1); // Tails
+			setupm_name[l] = (char)choice;
+			setupm_name[l + 1] = 0;
+		}
+		break;
 	}
+
+		// check skin
+		if (setupm_fakeskin < 0)
+			setupm_fakeskin = numskins-1;
+		if (setupm_fakeskin > numskins-1)
+			setupm_fakeskin = 0;
+
+		// check color
+		if (setupm_fakecolor < 1)
+			setupm_fakecolor = MAXSKINCOLORS-1;
+		if (setupm_fakecolor > MAXSKINCOLORS-1)
+			setupm_fakecolor = 1;
+
+		if (exitmenu)
+		{
+			if (currentMenu->prevMenu)
+				M_SetupNextMenu (currentMenu->prevMenu);
+			else
+				M_ClearMenus(true);
+		}
 }
 
 // start the multiplayer setup menu
@@ -9933,6 +10699,11 @@ static void M_SetupMultiPlayer(INT32 choice)
 	setupm_cvcolor = &cv_playercolor;
 	setupm_cvname = &cv_playername;
 
+	setupm_skinxpos = 4;
+	setupm_skinypos = 0;
+	setupm_skinlockedselect = false;
+	setupm_returntoskingridonback = false;
+
 	// For whatever reason this doesn't work right if you just use ->value
 	setupm_fakeskin = R_SkinAvailable(setupm_cvskin->string);
 	if (setupm_fakeskin == -1)
@@ -9941,9 +10712,9 @@ static void M_SetupMultiPlayer(INT32 choice)
 
 	// disable skin changes if we can't actually change skins
 	if (!CanChangeSkin(consoleplayer))
-		MP_PlayerSetupMenu[2].status = (IT_GRAYEDOUT);
+		MP_PlayerSetupMenu[1].status = (IT_GRAYEDOUT);
 	else
-		MP_PlayerSetupMenu[2].status = (IT_KEYHANDLER|IT_STRING);
+		MP_PlayerSetupMenu[1].status = (IT_KEYHANDLER|IT_STRING);
 
 	MP_PlayerSetupDef.prevMenu = currentMenu;
 	M_SetupNextMenu(&MP_PlayerSetupDef);
@@ -9964,6 +10735,11 @@ static void M_SetupMultiPlayer2(INT32 choice)
 	setupm_cvcolor = &cv_playercolor2;
 	setupm_cvname = &cv_playername2;
 
+	setupm_skinxpos = 4;
+	setupm_skinypos = 0;
+	setupm_skinlockedselect = false;
+	setupm_returntoskingridonback = false;
+
 	// For whatever reason this doesn't work right if you just use ->value
 	setupm_fakeskin = R_SkinAvailable(setupm_cvskin->string);
 	if (setupm_fakeskin == -1)
@@ -9972,9 +10748,9 @@ static void M_SetupMultiPlayer2(INT32 choice)
 
 	// disable skin changes if we can't actually change skins
 	if (splitscreen && !CanChangeSkin(displayplayers[1]))
-		MP_PlayerSetupMenu[2].status = (IT_GRAYEDOUT);
+		MP_PlayerSetupMenu[1].status = (IT_GRAYEDOUT);
 	else
-		MP_PlayerSetupMenu[2].status = (IT_KEYHANDLER | IT_STRING);
+		MP_PlayerSetupMenu[1].status = (IT_KEYHANDLER | IT_STRING);
 
 	MP_PlayerSetupDef.prevMenu = currentMenu;
 	M_SetupNextMenu(&MP_PlayerSetupDef);
@@ -9995,6 +10771,11 @@ static void M_SetupMultiPlayer3(INT32 choice)
 	setupm_cvcolor = &cv_playercolor3;
 	setupm_cvname = &cv_playername3;
 
+	setupm_skinxpos = 4;
+	setupm_skinypos = 0;
+	setupm_skinlockedselect = false;
+	setupm_returntoskingridonback = false;
+
 	// For whatever reason this doesn't work right if you just use ->value
 	setupm_fakeskin = R_SkinAvailable(setupm_cvskin->string);
 	if (setupm_fakeskin == -1)
@@ -10003,9 +10784,9 @@ static void M_SetupMultiPlayer3(INT32 choice)
 
 	// disable skin changes if we can't actually change skins
 	if (splitscreen > 1 && !CanChangeSkin(displayplayers[2]))
-		MP_PlayerSetupMenu[2].status = (IT_GRAYEDOUT);
+		MP_PlayerSetupMenu[1].status = (IT_GRAYEDOUT);
 	else
-		MP_PlayerSetupMenu[2].status = (IT_KEYHANDLER | IT_STRING);
+		MP_PlayerSetupMenu[1].status = (IT_KEYHANDLER | IT_STRING);
 
 	MP_PlayerSetupDef.prevMenu = currentMenu;
 	M_SetupNextMenu(&MP_PlayerSetupDef);
@@ -10026,6 +10807,11 @@ static void M_SetupMultiPlayer4(INT32 choice)
 	setupm_cvcolor = &cv_playercolor4;
 	setupm_cvname = &cv_playername4;
 
+	setupm_skinxpos = 4;
+	setupm_skinypos = 0;
+	setupm_skinlockedselect = false;
+	setupm_returntoskingridonback = false;
+
 	// For whatever reason this doesn't work right if you just use ->value
 	setupm_fakeskin = R_SkinAvailable(setupm_cvskin->string);
 	if (setupm_fakeskin == -1)
@@ -10034,9 +10820,9 @@ static void M_SetupMultiPlayer4(INT32 choice)
 
 	// disable skin changes if we can't actually change skins
 	if (splitscreen > 2 && !CanChangeSkin(displayplayers[3]))
-		MP_PlayerSetupMenu[2].status = (IT_GRAYEDOUT);
+		MP_PlayerSetupMenu[1].status = (IT_GRAYEDOUT);
 	else
-		MP_PlayerSetupMenu[2].status = (IT_KEYHANDLER | IT_STRING);
+		MP_PlayerSetupMenu[1].status = (IT_KEYHANDLER | IT_STRING);
 
 	MP_PlayerSetupDef.prevMenu = currentMenu;
 	M_SetupNextMenu(&MP_PlayerSetupDef);
@@ -10154,7 +10940,7 @@ static void M_DrawJoystick(void)
 		compareval4 = cv_usejoystick4.value;
 		compareval3 = cv_usejoystick3.value;
 		compareval2 = cv_usejoystick2.value;
-		compareval = cv_usejoystick.value
+		compareval = cv_usejoystick.value;
 #endif
 
 		if ((setupcontrolplayer == 4 && (i == compareval4))
@@ -10581,7 +11367,7 @@ static void M_DrawControl(void)
 
 		if (currentMenu->menuitems[i].status == IT_CONTROL)
 		{
-			V_DrawString(x, y, ((i == itemOn) ? highlightflags : 0), currentMenu->menuitems[i].text);
+			V_DrawString(x, y, ((i == itemOn) ? highlightflags : 0)|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 			keys[0] = setupcontrols[currentMenu->menuitems[i].alphaKey][0];
 			keys[1] = setupcontrols[currentMenu->menuitems[i].alphaKey][1];
 
@@ -10602,14 +11388,14 @@ static void M_DrawControl(void)
 					strcat (tmp, G_KeynumToString (keys[1]));
 
 			}
-			V_DrawRightAlignedString(BASEVIDWIDTH-currentMenu->x, y, highlightflags, tmp);
+			V_DrawRightAlignedString(BASEVIDWIDTH-currentMenu->x, y, highlightflags|V_ALLOWLOWERCASE, tmp);
 		}
 		/*else if (currentMenu->menuitems[i].status == IT_GRAYEDOUT2)
 			V_DrawString(x, y, V_TRANSLUCENT, currentMenu->menuitems[i].text);*/
 		else if ((currentMenu->menuitems[i].status == IT_HEADER) && (i != max-1))
-			V_DrawString(19, y+6, highlightflags, currentMenu->menuitems[i].text);
+			V_DrawString(19, y+6, highlightflags|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 		else if (currentMenu->menuitems[i].status & IT_STRING)
-			V_DrawString(x, y, ((i == itemOn) ? highlightflags : 0), currentMenu->menuitems[i].text);
+			V_DrawString(x, y, ((i == itemOn) ? highlightflags : 0)|V_ALLOWLOWERCASE, currentMenu->menuitems[i].text);
 
 		y += SMALLLINEHEIGHT;
 	}
@@ -10927,13 +11713,21 @@ static void M_VideoModeMenu(INT32 choice)
 
 static void M_DrawVideoMenu(void)
 {
-	M_DrawGenericMenu();
+	M_DrawGenericScrollMenu();
 
-	V_DrawRightAlignedString(BASEVIDWIDTH - currentMenu->x, currentMenu->y + OP_VideoOptionsMenu[0].alphaKey,
-		(SCR_IsAspectCorrect(vid.width, vid.height) ? recommendedflags : highlightflags),
+	if (itemOn < 8)
+	{
+		INT32 y = currentMenu->y + (currentMenu->menuitems[1].alphaKey * 2);
+		if (itemOn >= 7)
+			y -= 8;
+			
+		V_DrawRightAlignedString(BASEVIDWIDTH - currentMenu->x, y,
+		(SCR_IsAspectCorrect(vid.width, vid.height) ? recommendedflags : highlightflags)|V_ALLOWLOWERCASE,
 			va("%dx%d", vid.width, vid.height));
+	}
 }
 
+#if 0
 static void M_DrawHUDOptions(void)
 {
 	const char *str0 = ")";
@@ -10955,6 +11749,7 @@ static void M_DrawHUDOptions(void)
 	V_DrawString(x, y, recommendedflags, str3);
 	V_DrawRightAlignedString(x, y, highlightflags, "(");
 }
+#endif
 
 // Draw the video modes list, a-la-Quake
 static void M_DrawVideoMode(void)
@@ -10964,23 +11759,22 @@ static void M_DrawVideoMode(void)
 	// draw title
 	M_DrawMenuTitle();
 
-	V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y,
-		highlightflags, "Choose mode, reselect to change default");
+	V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y, highlightflags|V_ALLOWLOWERCASE, "Choose mode, reselect to change default");
 
-	row = 41;
+	row = 69;
 	col = OP_VideoModeDef.y + 14;
 	for (i = 0; i < vidm_nummodes; i++)
 	{
 		if (i == vidm_selected)
-			V_DrawString(row, col, highlightflags, modedescs[i].desc);
+			V_DrawCenteredString(row, col, highlightflags|V_ALLOWLOWERCASE, modedescs[i].desc);
 		// Show multiples of 320x200 as green.
 		else
-			V_DrawString(row, col, (modedescs[i].goodratio) ? recommendedflags : 0, modedescs[i].desc);
+			V_DrawCenteredString(row, col, ((modedescs[i].goodratio) ? recommendedflags : 0)|V_ALLOWLOWERCASE, modedescs[i].desc);
 
 		col += 8;
 		if ((i % vidm_column_size) == (vidm_column_size-1))
 		{
-			row += 7*13;
+			row += 91;
 			col = OP_VideoModeDef.y + 14;
 		}
 	}
@@ -10994,11 +11788,11 @@ static void M_DrawVideoMode(void)
 				(SCR_IsAspectCorrect(vid.width, vid.height)) ? 0x83 : 0x80,
 				vid.width, vid.height));
 		M_CentreText(OP_VideoModeDef.y + 138,
-			"Press ENTER again to keep this mode");
+			"Press \x82[ENTER]\x80 again to keep this mode");
 		M_CentreText(OP_VideoModeDef.y + 150,
-			va("Wait %d second%s", testtime, (testtime > 1) ? "s" : ""));
+			va("Wait \x82%d\x80 second%s...", testtime, (testtime > 1) ? "s" : ""));
 		M_CentreText(OP_VideoModeDef.y + 158,
-			"or press ESC to return");
+			"or press \x82[ESC]\x80 to return");
 
 	}
 	else
@@ -11012,93 +11806,91 @@ static void M_DrawVideoMode(void)
 				(SCR_IsAspectCorrect(cv_scr_width.value, cv_scr_height.value)) ? 0x83 : 0x80,
 				cv_scr_width.value, cv_scr_height.value));
 
-		V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y + 138,
-			recommendedflags, "Marked modes are recommended.");
-		V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y + 146,
-			highlightflags, "Other modes may have visual errors.");
-		V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y + 158,
-			highlightflags, "Larger modes may have performance issues.");
+		V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y + 138, recommendedflags|V_ALLOWLOWERCASE, va("%s colored modes are recommended.", (recommendedflags == V_GREENMAP) ? "Green" : "Sky-Blue"));
+		V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y + 146, highlightflags|V_ALLOWLOWERCASE, "Other modes may have visual errors.");
+		V_DrawCenteredString(BASEVIDWIDTH/2, OP_VideoModeDef.y + 158, warningflags|V_ALLOWLOWERCASE, "Larger modes may have performance issues.");
 	}
 
 	// Draw the cursor for the VidMode menu
 	i = 41 - 10 + ((vidm_selected / vidm_column_size)*7*13);
 	j = OP_VideoModeDef.y + 14 + ((vidm_selected % vidm_column_size)*8);
 
-	V_DrawScaledPatch(i - 8, j, 0,
-		W_CachePatchName("M_CURSOR", PU_CACHE));
+	V_DrawScaledPatch(i - 8, j, 0, W_CachePatchName("M_CURSOR", PU_CACHE));
 }
 
 // special menuitem key handler for video mode list
 static void M_HandleVideoMode(INT32 ch)
 {
-	if (vidm_testingmode > 0) switch (ch)
-	{
-		// change back to the previous mode quickly
-		case KEY_ESCAPE:
-			setmodeneeded = vidm_previousmode + 1;
-			vidm_testingmode = 0;
-			break;
+	if (vidm_testingmode > 0)
+		switch (ch)
+		{
+			// change back to the previous mode quickly
+			case KEY_ESCAPE:
+				setmodeneeded = vidm_previousmode + 1;
+				vidm_testingmode = 0;
+				break;
 
-		case KEY_ENTER:
-			S_StartSound(NULL, sfx_menu1);
-			vidm_testingmode = 0; // stop testing
-	}
+			case KEY_ENTER:
+				S_StartSound(NULL, sfx_menu1);
+				vidm_testingmode = 0; // stop testing
+		}
+	else 
+		switch (ch)
+		{
+			case KEY_DOWNARROW:
+				S_StartSound(NULL, sfx_menu1);
+				if (++vidm_selected >= vidm_nummodes)
+					vidm_selected = 0;
+				break;
 
-	else switch (ch)
-	{
-		case KEY_DOWNARROW:
-			S_StartSound(NULL, sfx_menu1);
-			if (++vidm_selected >= vidm_nummodes)
-				vidm_selected = 0;
-			break;
+			case KEY_UPARROW:
+				S_StartSound(NULL, sfx_menu1);
+				if (--vidm_selected < 0)
+					vidm_selected = vidm_nummodes - 1;
+				break;
 
-		case KEY_UPARROW:
-			S_StartSound(NULL, sfx_menu1);
-			if (--vidm_selected < 0)
-				vidm_selected = vidm_nummodes - 1;
-			break;
+			case KEY_LEFTARROW:
+				S_StartSound(NULL, sfx_menu1);
+				vidm_selected -= vidm_column_size;
+				if (vidm_selected < 0)
+					vidm_selected = (vidm_column_size*3) + vidm_selected;
+				if (vidm_selected >= vidm_nummodes)
+					vidm_selected = vidm_nummodes - 1;
+				break;
 
-		case KEY_LEFTARROW:
-			S_StartSound(NULL, sfx_menu1);
-			vidm_selected -= vidm_column_size;
-			if (vidm_selected < 0)
-				vidm_selected = (vidm_column_size*3) + vidm_selected;
-			if (vidm_selected >= vidm_nummodes)
-				vidm_selected = vidm_nummodes - 1;
-			break;
+			case KEY_RIGHTARROW:
+				S_StartSound(NULL, sfx_menu1);
+				vidm_selected += vidm_column_size;
+				if (vidm_selected >= (vidm_column_size*3))
+					vidm_selected %= vidm_column_size;
+				if (vidm_selected >= vidm_nummodes)
+					vidm_selected = vidm_nummodes - 1;
+				break;
 
-		case KEY_RIGHTARROW:
-			S_StartSound(NULL, sfx_menu1);
-			vidm_selected += vidm_column_size;
-			if (vidm_selected >= (vidm_column_size*3))
-				vidm_selected %= vidm_column_size;
-			if (vidm_selected >= vidm_nummodes)
-				vidm_selected = vidm_nummodes - 1;
-			break;
+			case KEY_ENTER:
+				S_StartSound(NULL, sfx_menu1);
+				if (vid.modenum == modedescs[vidm_selected].modenum)
+					SCR_SetDefaultMode();
+				else
+				{
+					vidm_testingmode = 15*TICRATE;
+					vidm_previousmode = vid.modenum;
 
-		case KEY_ENTER:
-			S_StartSound(NULL, sfx_menu1);
-			if (vid.modenum == modedescs[vidm_selected].modenum)
-				SCR_SetDefaultMode();
-			else
-			{
-				vidm_testingmode = 15*TICRATE;
-				vidm_previousmode = vid.modenum;
-				if (!setmodeneeded) // in case the previous setmode was not finished
-					setmodeneeded = modedescs[vidm_selected].modenum + 1;
-			}
-			break;
+					if (!setmodeneeded) // in case the previous setmode was not finished
+						setmodeneeded = modedescs[vidm_selected].modenum + 1;
+				}
+				break;
 
-		case KEY_ESCAPE: // this one same as M_Responder
-			if (currentMenu->prevMenu)
-				M_SetupNextMenu(currentMenu->prevMenu);
-			else
-				M_ClearMenus(true);
-			break;
+			case KEY_ESCAPE: // this one same as M_Responder
+				if (currentMenu->prevMenu)
+					M_SetupNextMenu(currentMenu->prevMenu);
+				else
+					M_ClearMenus(true);
+				break;
 
-		default:
-			break;
-	}
+			default:
+				break;
+		}
 }
 
 // ===============
@@ -11305,7 +12097,7 @@ static void M_DrawMonitorToggles(void)
 	if (shitsfree && interpTimerHackAllow)
 		shitsfree--;
 
-	V_DrawCenteredString(BASEVIDWIDTH/2, currentMenu->y, highlightflags, va("* %s *", currentMenu->menuitems[itemOn].text));
+	V_DrawCenteredString(BASEVIDWIDTH/2, currentMenu->y, highlightflags|V_ALLOWLOWERCASE, va("* %s *", currentMenu->menuitems[itemOn].text));
 }
 
 static void M_HandleMonitorToggles(INT32 choice)

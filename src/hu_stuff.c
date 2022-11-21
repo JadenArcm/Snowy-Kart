@@ -79,7 +79,10 @@ patch_t *cred_font[CRED_FONTSIZE];
 // Note: I'd like to adress that at this point we might *REALLY* want to work towards a common drawString function that can take any font we want because this is really turning into a MESS. :V -Lat'
 patch_t *pingnum[10];
 patch_t *pinggfx[5];	// small ping graphic
+patch_t *smpinggfx[5]; // compact ping graphic
 patch_t *pingmeasure[2]; // ping measurement graphic
+
+patch_t *ranknum[10];
 
 patch_t *framecounter;
 patch_t *frameslash;	// framerate stuff. Used in screen.c
@@ -281,6 +284,8 @@ void HU_LoadGraphics(void)
 		nightsnum[i] = (patch_t *) W_CachePatchName(buffer, PU_HUDGFX);
 		sprintf(buffer, "PINGN%d", i);
 		pingnum[i] = (patch_t *) W_CachePatchName(buffer, PU_HUDGFX);
+		sprintf(buffer, "OPPRNK0%d", i);
+		ranknum[i] = (patch_t *) W_CachePatchName(buffer, PU_HUDGFX);
 	}
 
 	// minus for negative tallnums
@@ -319,6 +324,8 @@ void HU_LoadGraphics(void)
 	{
 		sprintf(buffer, "PINGGFX%d", i+1);
 		pinggfx[i] = (patch_t *)W_CachePatchName(buffer, PU_HUDGFX);
+		sprintf(buffer, "MN_PING%d", i+1);
+		smpinggfx[i] = (patch_t *)W_CachePatchName(buffer, PU_HUDGFX);
 	}
 
 	pingmeasure[0] = W_CachePatchName("PINGD", PU_HUDGFX);
@@ -2525,19 +2532,20 @@ void HU_Erase(void)
 //                   IN-LEVEL MULTIPLAYER RANKINGS
 //======================================================================
 
-static int
-Ping_gfx_num (int lag)
+int HU_getPingPatch(int lag, boolean extended)
 {
-	if (lag < 2)
-		return 0;
-	else if (lag < 4)
-		return 1;
-	else if (lag < 7)
-		return 2;
-	else if (lag < 10)
-		return 3;
-	else
-		return 4;
+	int patchnum = 0;
+
+	int selected = (extended) ? 1 : 0;
+	int vals[2][4] = {{2, 4, 7, 10}, {82, 147, 254, 500}};
+
+	for (int i = 0; i < 4; i++)
+	{
+		if (lag >= vals[selected][i])
+			patchnum = i + 1;
+	}
+
+	return patchnum;
 }
 
 //
@@ -2550,10 +2558,10 @@ void HU_drawPing(INT32 x, INT32 y, UINT32 lag, INT32 flags)
 	INT32 measureid = cv_pingmeasurement.value ? 1 : 0;
 	INT32 gfxnum; // gfx to draw
 
-	gfxnum = Ping_gfx_num(lag);
+	gfxnum = HU_getPingPatch(lag, false);
 
 	if (measureid == 1)
-		V_DrawScaledPatch(x+11 - pingmeasure[measureid]->width, y+9, flags, pingmeasure[measureid]);
+		V_DrawScaledPatch(x+11 - pingmeasure[measureid]->width, y+10, flags, pingmeasure[measureid]);
 	V_DrawScaledPatch(x+2, y, flags, pinggfx[gfxnum]);
 
 	if (servermaxping && lag > servermaxping && hu_tick < 4)
@@ -2578,36 +2586,42 @@ void HU_drawPing(INT32 x, INT32 y, UINT32 lag, INT32 flags)
 //
 static inline void HU_DrawSpectatorTicker(void)
 {
-	INT32 i;
-	INT32 length = 0, height = 174;
+	boolean race = (gametype == GT_RACE);
+	INT32 i, length = 0;
+
+	INT32 height = (race) ? 175 : 177, p_width = (race) ? 4 : 6;
+	INT32 flags = V_ALLOWLOWERCASE | ((race) ? 0 : V_6WIDTHSPACE);
+
+	void (*draw_str)(INT32, INT32, INT32, const char*) = (race) ? V_DrawSmallString : V_DrawThinString;
+	INT32 (*str_width)(const char*, INT32) = (race) ? V_SmallStringWidth : V_ThinStringWidth;
+	
 	INT32 totallength = 0, templength = -8;
 	INT32 dupadjust = (vid.width/vid.dupx), duptweak = (dupadjust - BASEVIDWIDTH)/2;
 
 	for (i = 0; i < MAXPLAYERS; i++)
 		if (playeringame[i] && players[i].spectator)
-			totallength += (signed)strlen(player_names[i]) * 8 + 16;
+			totallength += str_width(player_names[i], flags) + (p_width * 2);
 
-	length -= (leveltime % (totallength + dupadjust+8));
+	length -= (leveltime % (totallength + dupadjust + p_width));
 	length += dupadjust;
 
 	for (i = 0; i < MAXPLAYERS; i++)
 		if (playeringame[i] && players[i].spectator)
 		{
 			char *pos;
-			char initial[MAXPLAYERNAME+1];
-			char current[MAXPLAYERNAME+1];
-			INT32 len;
-
-			len = ((signed)strlen(player_names[i]) * 8 + 16);
+			char initial[MAXPLAYERNAME+1], current[MAXPLAYERNAME+1];
+			
+			char color = (players[i].skincolor) ? V_GetSkincolorChar(players[i].skincolor) : 0x80;
+			INT32 len = str_width(player_names[i], flags) + (p_width * 2);
 
 			strcpy(initial, player_names[i]);
 			pos = initial;
 
 			if (length >= -len)
 			{
-				if (length < -8)
+				if (length < -p_width)
 				{
-					UINT8 eatenchars = (UINT8)(abs(length) / 8);
+					UINT8 eatenchars = (UINT8)(abs(length) / p_width);
 
 					if (eatenchars <= strlen(initial))
 					{
@@ -2615,7 +2629,7 @@ static inline void HU_DrawSpectatorTicker(void)
 						// then compensate the drawing position.
 						pos += eatenchars;
 						strcpy(current, pos);
-						templength = ((length + 8) % 8);
+						templength = ((length + p_width) % p_width);
 					}
 					else
 					{
@@ -2629,7 +2643,7 @@ static inline void HU_DrawSpectatorTicker(void)
 					templength = length;
 				}
 
-				V_DrawString(templength - duptweak, height, V_TRANSLUCENT|V_ALLOWLOWERCASE, current);
+				draw_str(templength - duptweak, height, V_TRANSLUCENT|flags, va("%c%s", color, current));
 			}
 
 			if ((length += len) >= dupadjust+8)
@@ -2642,7 +2656,6 @@ static inline void HU_DrawSpectatorTicker(void)
 //
 static void HU_DrawRankings(void)
 {
-	patch_t *p;
 	playersort_t tab[MAXPLAYERS];
 	INT32 i, j, scorelines, hilicol, numplayersingame = 0;
 	boolean completed[MAXPLAYERS];
@@ -2658,28 +2671,11 @@ static void HU_DrawRankings(void)
 		hilicol = ((gametype == GT_RACE) ? V_SKYMAP : V_REDMAP);
 
 	// draw the current gametype in the lower right
-	if (modeattacking)
-		V_DrawString(4, 188, hilicol|V_SNAPTOBOTTOM|V_SNAPTOLEFT, "Record Attack");
-	else
-		V_DrawString(4, 188, hilicol|V_SNAPTOBOTTOM|V_SNAPTOLEFT, gametype_cons_t[gametype].strvalue);
-
-	if (G_GametypeHasTeams())
 	{
-		if (gametype == GT_CTF)
-			p = bflagico;
-		else
-			p = bmatcico;
+		const char *gt_str = (modeattacking) ? "Record Attack" : gametype_cons_t[gametype].strvalue;
+		INT32 yoffs = (gametype == GT_RACE) ? 179 : 188;
 
-		V_DrawSmallScaledPatch(128 - SHORT(p->width)/4, 4, 0, p);
-		V_DrawCenteredString(128, 16, 0, va("%u", bluescore));
-
-		if (gametype == GT_CTF)
-			p = rflagico;
-		else
-			p = rmatcico;
-
-		V_DrawSmallScaledPatch(192 - SHORT(p->width)/4, 4, 0, p);
-		V_DrawCenteredString(192, 16, 0, va("%u", redscore));
+		V_DrawString(4, yoffs, hilicol|V_ALLOWLOWERCASE|V_SNAPTOBOTTOM|V_SNAPTOLEFT, gt_str);
 	}
 
 	if (!G_RaceGametype())
@@ -2687,52 +2683,41 @@ static void HU_DrawRankings(void)
 		if (cv_timelimit.value && timelimitintics > 0)
 		{
 			UINT32 timeval = (timelimitintics + starttime + 1 - leveltime);
+			
 			if (timeval > timelimitintics+1)
 				timeval = timelimitintics;
+			
 			timeval /= TICRATE;
 
 			if (leveltime <= (timelimitintics + starttime))
 			{
-				V_DrawCenteredString(64, 8, 0, "TIME LEFT");
-				V_DrawCenteredString(64, 16, hilicol, va("%u", timeval));
+				V_DrawCenteredString(64, 5, V_ALLOWLOWERCASE, "\x82*\x80 Time Left \x82*");
+				V_DrawCenteredString(64, 13, hilicol, va("%u", timeval));
 			}
 
 			// overtime
 			if (!players[consoleplayer].exiting && (leveltime > (timelimitintics + starttime + TICRATE/2)) && cv_overtime.value)
 			{
-				V_DrawCenteredString(64, 8, 0, "TIME LEFT");
-				V_DrawCenteredString(64, 16, hilicol, "OVERTIME");
+				V_DrawCenteredString(64, 5, V_ALLOWLOWERCASE, "\x82*\x80 Time Left \x82*");
+				V_DrawCenteredString(64, 13, V_REDMAP, "OVERTIME");
 			}
 		}
 
 		if (cv_pointlimit.value > 0)
 		{
-			V_DrawCenteredString(256, 8, 0, "POINT LIMIT");
-			V_DrawCenteredString(256, 16, hilicol, va("%d", cv_pointlimit.value));
+			V_DrawCenteredString(256, 5, V_ALLOWLOWERCASE, "\x82*\x80 Point Limit \x82*");
+			V_DrawCenteredString(256, 13, hilicol, va("%d", cv_pointlimit.value));
 		}
 	}
-	/*else if (gametype == GT_COOP)
-	{
-		INT32 totalscore = 0;
-		for (i = 0; i < MAXPLAYERS; i++)
-		{
-			if (playeringame[i])
-				totalscore += players[i].score;
-		}
-
-		V_DrawCenteredString(256, 8, 0, "TOTAL SCORE");
-		V_DrawCenteredString(256, 16, 0, va("%u", totalscore));
-	}*/
 	else
 	{
 		if (circuitmap)
 		{
-			V_DrawCenteredString(64, 8, 0, "LAP COUNT");
-			V_DrawCenteredString(64, 16, hilicol, va("%d", cv_numlaps.value));
+			V_DrawCenteredString(160, 6, V_ALLOWLOWERCASE, "\x82*\x80 Total Laps \x82*");
+			V_DrawCenteredString(160, 14, hilicol, va("%d", cv_numlaps.value));
 		}
 
-		V_DrawCenteredString(256, 8, 0, "GAME SPEED");
-		V_DrawCenteredString(256, 16, hilicol, cv_kartspeed.string);
+		V_DrawString(4, 188, hilicol|V_ALLOWLOWERCASE|V_SNAPTOBOTTOM|V_SNAPTOLEFT, va("%s Speed", cv_kartspeed.string));
 	}
 
 	// When you play, you quickly see your score because your name is displayed in white.
@@ -2795,12 +2780,7 @@ static void HU_DrawRankings(void)
 #endif
 	}
 
-	/*if (G_GametypeHasTeams())
-		HU_DrawTeamTabRankings(tab, whiteplayer); //separate function for Spazzo's silly request -- gotta fix this up later
-	else if (scorelines > 10)*/
-	HU_DrawTabRankings(((scorelines > 8) ? 32 : 40), 33, tab, scorelines, whiteplayer, hilicol);
-	/*else
-		HU_DrawDualTabRankings(32, 32, tab, scorelines, whiteplayer);*/
+	HU_DrawTabRankings(40, 33, tab, scorelines, whiteplayer, hilicol);
 
 	// draw spectators in a ticker across the bottom
 	if (netgame && G_GametypeHasSpectators())

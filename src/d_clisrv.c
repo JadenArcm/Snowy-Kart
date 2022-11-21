@@ -151,6 +151,10 @@ boolean acceptnewnode = true;
 boolean serverisfull = false; //lets us be aware if the server was full after we check files, but before downloading, so we can ask if the user still wants to download or not
 tic_t firstconnectattempttime = 0;
 
+// snowy: server preview
+INT32 selected_server = 0;
+boolean canshow_serverlist = false, isquitting_serverlist = false;
+
 // engine
 
 // Must be a power of two
@@ -1189,7 +1193,7 @@ static inline void CL_DrawConnectionStatus(void)
 	INT32 ccstime = I_GetTime();
 
 	// Draw background fade
-	V_DrawFadeScreen(0xFF00, 16);
+	V_DrawFadeScreen(0xFF00, 21);
 
 	if (cl_mode != CL_DOWNLOADFILES && cl_mode != CL_LOADFILES && cl_mode != CL_CHECKFILES
 #ifdef HAVE_CURL
@@ -1203,11 +1207,11 @@ static inline void CL_DrawConnectionStatus(void)
 		const char *cltext;
 
 		//Draw bottom box
-		M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-24-8, 32, 1);
-		V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-24, V_YELLOWMAP, "Press ESC to abort");
+		M_DrawTextBox((BASEVIDWIDTH / 2) - 136, (BASEVIDHEIGHT - 24) - 8, 32, 1);
+		V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 24, V_YELLOWMAP | V_ALLOWLOWERCASE, "Press ESC to abort");
 
 		for (i = 0; i < 16; ++i)
-			V_DrawFill((BASEVIDWIDTH/2-128) + (i * 16), BASEVIDHEIGHT-24, 16, 8, palstart + ((animtime - i) & 15));
+			V_DrawFill((BASEVIDWIDTH / 2) - 128 + (i * 16), BASEVIDHEIGHT - 24, 16, 8, palstart + ((animtime - i) & 15));
 
 		switch (cl_mode)
 		{
@@ -1217,10 +1221,8 @@ static inline void CL_DrawConnectionStatus(void)
 				{
 					cltext = M_GetText("Downloading game state...");
 					Net_GetNetStat();
-					V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-						va(" %4uK",fileneeded[lastfilenum].currentsize>>10));
-					V_DrawRightAlignedString(BASEVIDWIDTH/2+128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-						va("%3.1fK/s ", ((double)getbps)/1024));
+					V_DrawString((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va(" %4uK", fileneeded[lastfilenum].currentsize >> 10));
+					V_DrawRightAlignedString((BASEVIDWIDTH / 2) + 128, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va("%3.1fK/s ", ((double)getbps)/1024));
 				}
 				else
 					cltext = M_GetText("Waiting to download game state...");
@@ -1251,7 +1253,7 @@ static inline void CL_DrawConnectionStatus(void)
 				cltext = M_GetText("Connecting to server...");
 				break;
 		}
-		V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-32, V_YELLOWMAP, cltext);
+		V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 32, V_YELLOWMAP|V_ALLOWLOWERCASE, cltext);
 	}
 	else
 	{
@@ -1261,7 +1263,7 @@ static inline void CL_DrawConnectionStatus(void)
 			INT32 checkednum = 0;
 			INT32 i;
 
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-24, V_YELLOWMAP, "Press ESC to abort");
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 24, V_YELLOWMAP|V_ALLOWLOWERCASE, "Press ESC to abort");
 
 			//ima just count files here
 			for (i = 0; i < fileneedednum; i++)
@@ -1269,13 +1271,14 @@ static inline void CL_DrawConnectionStatus(void)
 					checkednum++;
 
 			// Loading progress
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-32, V_YELLOWMAP, "Checking server addons...");
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 32, V_YELLOWMAP|V_ALLOWLOWERCASE, "Checking server addons...");
 			totalfileslength = (INT32)((checkednum/(double)(fileneedednum)) * 256);
-			M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-24-8, 32, 1);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, 256, 8, 175);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, totalfileslength, 8, 160);
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-				va(" %2u/%2u Files",checkednum,fileneedednum));
+			
+			M_DrawTextBox((BASEVIDWIDTH / 2) - 136, (BASEVIDHEIGHT - 24) - 8, 32, 1);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, 256, 8, 175);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, totalfileslength, 8, 160);
+			
+			V_DrawCenteredString(BASEVIDWIDTH / 2, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va(" %2u/%2u Files", checkednum, fileneedednum));
 		}
 		else if (cl_mode == CL_LOADFILES)
 		{
@@ -1283,7 +1286,7 @@ static inline void CL_DrawConnectionStatus(void)
 			INT32 loadcompletednum = 0;
 			INT32 i;
 
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-24, V_YELLOWMAP, "Press ESC to abort");
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 24, V_YELLOWMAP|V_ALLOWLOWERCASE, "Press ESC to abort");
 
 			//ima just count files here
 			for (i = 0; i < fileneedednum; i++)
@@ -1291,58 +1294,50 @@ static inline void CL_DrawConnectionStatus(void)
 					loadcompletednum++;
 
 			// Loading progress
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-32, V_YELLOWMAP, "Loading server addons...");
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 32, V_YELLOWMAP|V_ALLOWLOWERCASE, "Loading server addons...");
 			totalfileslength = (INT32)((loadcompletednum/(double)(fileneedednum)) * 256);
-			M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-24-8, 32, 1);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, 256, 8, 175);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, totalfileslength, 8, 160);
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-				va(" %2u/%2u Files",loadcompletednum,fileneedednum));
+			
+			M_DrawTextBox((BASEVIDWIDTH / 2) - 136, (BASEVIDHEIGHT - 24) - 8, 32, 1);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, 256, 8, 175);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, totalfileslength, 8, 160);
+			
+			V_DrawCenteredString(BASEVIDWIDTH / 2, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va(" %2u/%2u Files", loadcompletednum, fileneedednum));
 		}
 		else if (lastfilenum != -1)
 		{
 			INT32 dldlength;
 			INT32 totalfileslength;
 			UINT32 totaldldsize;
-			static char tempname[28];
+			static char tempname[32];
 			fileneeded_t *file = &fileneeded[lastfilenum];
 			char *filename = file->filename;
 
+			char downloadcolor = (cl_mode == CL_DOWNLOADHTTPFILES) ? 0x88 : 0x85; 
+			const char *downloadstring = (cl_mode == CL_DOWNLOADHTTPFILES) ? "via HTTP" : "directly";
+
 			// Draw the bottom box.
-			M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-58-8, 32, 1);
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-14, V_YELLOWMAP, "Press ESC to abort");
+			M_DrawTextBox((BASEVIDWIDTH / 2) - 136, (BASEVIDHEIGHT - 58) - 8, 32, 1);
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 58) - 14, V_YELLOWMAP|V_ALLOWLOWERCASE, "Press ESC to abort");
 
 			Net_GetNetStat();
 			dldlength = (INT32)((file->currentsize/(double)file->totalsize) * 256);
 			if (dldlength > 256)
 				dldlength = 256;
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-58, 256, 8, 175);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-58, dldlength, 8, 160);
+			
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 58, 256, 8, 175);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 58, dldlength, 8, 160);
 
 			memset(tempname, 0, sizeof(tempname));
+			
 			// offset filename to just the name only part
 			filename += strlen(filename) - nameonlylength(filename);
+			strncpy(tempname, filename, sizeof(tempname) - 1);
 
-			if (strlen(filename) > sizeof(tempname)-1) // too long to display fully
-			{
-				size_t endhalfpos = strlen(filename)-10;
-				// display as first 14 chars + ... + last 10 chars
-				// which should add up to 27 if our math(s) is correct
-				snprintf(tempname, sizeof(tempname), "%.14s...%.10s", filename, filename+endhalfpos);
-			}
-			else // we can copy the whole thing in safely
-			{
-				strncpy(tempname, filename, sizeof(tempname)-1);
-			}
-
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-30, 0,
-				va(M_GetText("%s downloading"), ((cl_mode == CL_DOWNLOADHTTPFILES) ? "\x82""HTTP" : "\x85""Direct")));
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-58-22, V_YELLOWMAP,
-				va(M_GetText("\"%s\""), tempname));
-			V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-58, V_20TRANS|V_MONOSPACE,
-				va(" %4uK/%4uK",fileneeded[lastfilenum].currentsize>>10,file->totalsize>>10));
-			V_DrawRightAlignedString(BASEVIDWIDTH/2+128, BASEVIDHEIGHT-58, V_20TRANS|V_MONOSPACE,
-				va("%3.1fK/s ", ((double)getbps)/1024));
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 58) - 33, V_ALLOWLOWERCASE, va("%cDownloading %c%s", 0x82, downloadcolor, downloadstring));
+			V_DrawCenteredThinString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 58) - 24, V_YELLOWMAP|V_ALLOWLOWERCASE|V_6WIDTHSPACE, va("\"%s\"", tempname));
+			
+			V_DrawString((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 58, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va(" %4uK/%4uK", fileneeded[lastfilenum].currentsize >> 10, file->totalsize >> 10));
+			V_DrawRightAlignedString((BASEVIDWIDTH / 2) + 128, BASEVIDHEIGHT - 58, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va("%3.1fK/s ", ((double)getbps)/1024));
 
 			// Download progress
 
@@ -1351,21 +1346,19 @@ static inline void CL_DrawConnectionStatus(void)
 			else
 				totaldldsize = downloadcompletedsize;
 
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-14, V_YELLOWMAP, "Overall Download Progress");
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 14, V_YELLOWMAP|V_ALLOWLOWERCASE, "Overall Download Progress");
 			totalfileslength = (INT32)((totaldldsize/(double)totalfilesrequestedsize) * 256);
-			M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-24-8, 32, 1);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, 256, 8, 175);
-			V_DrawFill(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, totalfileslength, 8, 160);
+			
+			M_DrawTextBox((BASEVIDWIDTH / 2) - 136, (BASEVIDHEIGHT - 24) - 8, 32, 1);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, 256, 8, 175);
+			V_DrawFill((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, totalfileslength, 8, 160);
 
 			if (totalfilesrequestedsize>>20 >= 10) //display in MB if over 10MB
-				V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-					va(" %4uM/%4uM",totaldldsize>>20,totalfilesrequestedsize>>20));
+				V_DrawString((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va(" %4uM/%4uM",totaldldsize>>20,totalfilesrequestedsize>>20));
 			else
-				V_DrawString(BASEVIDWIDTH/2-128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-					va(" %4uK/%4uK",totaldldsize>>10,totalfilesrequestedsize>>10));
+				V_DrawString((BASEVIDWIDTH / 2) - 128, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va(" %4uK/%4uK",totaldldsize>>10,totalfilesrequestedsize>>10));
 
-			V_DrawRightAlignedString(BASEVIDWIDTH/2+128, BASEVIDHEIGHT-24, V_20TRANS|V_MONOSPACE,
-					va("%2u/%2u Files ",downloadcompletednum,totalfilesrequestednum));
+			V_DrawRightAlignedString((BASEVIDWIDTH / 2) + 128, BASEVIDHEIGHT - 24, V_20TRANS|V_MONOSPACE|V_ALLOWLOWERCASE, va("%2u/%2u Files ",downloadcompletednum,totalfilesrequestednum));
 		}
 		else
 		{
@@ -1374,14 +1367,13 @@ static inline void CL_DrawConnectionStatus(void)
 			// 15 pal entries total.
 
 			//Draw bottom box
-			M_DrawTextBox(BASEVIDWIDTH/2-128-8, BASEVIDHEIGHT-24-8, 32, 1);
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-24, V_YELLOWMAP, "Press ESC to abort");
+			M_DrawTextBox((BASEVIDWIDTH / 2) - 136, (BASEVIDHEIGHT - 24) - 8, 32, 1);
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 24, V_YELLOWMAP|V_ALLOWLOWERCASE, "Press ESC to abort");
 
 			for (i = 0; i < 16; ++i)
-				V_DrawFill((BASEVIDWIDTH/2-128) + (i * 16), BASEVIDHEIGHT-24, 16, 8, palstart + ((animtime - i) & 15));
+				V_DrawFill((BASEVIDWIDTH / 2) - 128 + (i * 16), BASEVIDHEIGHT - 24, 16, 8, palstart + ((animtime - i) & 15));
 
-			V_DrawCenteredString(BASEVIDWIDTH/2, BASEVIDHEIGHT-24-32, V_YELLOWMAP,
-				M_GetText("Waiting to download files..."));
+			V_DrawCenteredString(BASEVIDWIDTH / 2, (BASEVIDHEIGHT - 24) - 32, V_YELLOWMAP|V_ALLOWLOWERCASE, "Waiting to download files...");
 		}
 	}
 }
@@ -2484,6 +2476,9 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				D_QuitNetGame();
 				CL_Reset();
 				D_StartTitle();
+
+				canshow_serverlist = isquitting_serverlist = false;
+				
 				M_StartMessage(M_GetText(
 					"The direct download encountered an error.\n"
 					"See the logfile for more info.\n"
@@ -2513,6 +2508,9 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 				D_QuitNetGame();
 				CL_Reset();
 				D_StartTitle();
+
+				canshow_serverlist = isquitting_serverlist = false;
+
 				M_StartMessage(M_GetText(
 					"5 minute wait time exceeded.\n"
 					"You may retry connection.\n"
@@ -2586,6 +2584,8 @@ static boolean CL_ServerConnectionTicker(const char *tmpsave, tic_t *oldtic, tic
 			D_QuitNetGame();
 			CL_Reset();
 			D_StartTitle();
+
+			canshow_serverlist = isquitting_serverlist = false;
 
 			return false;
 		}

@@ -150,6 +150,12 @@ extern consvar_t cv_pingtimeout;
 extern consvar_t cv_showping;
 extern consvar_t cv_pingmeasurement;
 
+// snowy cvars!!!
+extern consvar_t cv_showinput, cv_showminimapnames;
+
+extern consvar_t cv_showfreeplay, cv_showviewpoint;
+extern consvar_t cv_animvoting;
+
 extern consvar_t cv_skipmapcheck;
 
 extern consvar_t cv_sleep;

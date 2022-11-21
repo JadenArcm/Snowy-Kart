@@ -190,6 +190,12 @@ typedef struct drawnode_s
 extern INT32 numskins;
 extern skin_t skins[MAXSKINS];
 
+extern INT32 skinstats[9][9][MAXSKINS];
+extern INT32 skinstatscount[9][9];
+
+//Max number a stat can have
+#define MAXSTAT 9
+
 boolean SetPlayerSkin(INT32 playernum,const char *skinname);
 void SetPlayerSkinByNum(INT32 playernum,INT32 skinnum); // Tails 03-16-2002
 INT32 R_SkinAvailable(const char *name);

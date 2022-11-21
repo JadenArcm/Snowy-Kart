@@ -560,6 +560,9 @@ extern UINT32 realpingtable[MAXPLAYERS];
 extern UINT32 playerpingtable[MAXPLAYERS];
 extern tic_t servermaxping;
 
+extern INT32 selected_server;
+extern boolean canshow_serverlist, isquitting_serverlist;
+
 extern consvar_t
 #ifdef VANILLAJOINNEXTROUND
 	cv_joinnextround,

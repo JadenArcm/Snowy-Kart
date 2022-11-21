@@ -325,7 +325,7 @@ static void D_Display(void)
 				F_WipeStartScreen();
 				V_DrawFill(0, 0, BASEVIDWIDTH, BASEVIDHEIGHT, 31);
 				F_WipeEndScreen();
-				F_RunWipe(wipedefs[wipedefindex], gamestate != GS_TIMEATTACK);
+				F_RunWipe(wipedefs[wipedefindex], gamestate != GS_TIMEATTACK && !canshow_serverlist);
 			}
 
 			if (gamestate != GS_LEVEL && rendermode != render_none)
@@ -549,18 +549,16 @@ static void D_Display(void)
 	// vid size change is now finished if it was on...
 	vid.recalc = 0;
 
-	// FIXME: draw either console or menu, not the two
-	if (gamestate != GS_TIMEATTACK)
-		CON_Drawer();
-
 #ifdef HAVE_THREADS
 	I_lock_mutex(&m_menu_mutex);
 #endif
-	M_Drawer(); // menu is drawn even on top of everything
+	M_Drawer(); // menu is drawn even on top of everything...
 #ifdef HAVE_THREADS
 	I_unlock_mutex(m_menu_mutex);
 #endif
 	// focus lost moved to M_Drawer
+
+	CON_Drawer(); // Ha, i LIED!
 
 	//
 	// wipe update
@@ -574,7 +572,7 @@ static void D_Display(void)
 		if (rendermode != render_none)
 		{
 			F_WipeEndScreen();
-			F_RunWipe(wipedefs[wipedefindex], gamestate != GS_TIMEATTACK);
+			F_RunWipe(wipedefs[wipedefindex], gamestate != GS_TIMEATTACK && !canshow_serverlist);
 		}
 	}
 
@@ -986,6 +984,8 @@ static void IdentifyVersion(void)
 	D_AddFile(va(pandf,srb2waddir,"patch.kart"), startupwadfiles);
 #endif
 
+	D_AddFile(va(pandf,srb2waddir,"snowy_files.pk3"), startupwadfiles);
+
 #if !defined (HAVE_SDL) || defined (HAVE_MIXER)
 #define MUSICTEST(str) \
 	{\
@@ -1294,6 +1294,9 @@ void D_SRB2Main(void)
 #ifdef USE_PATCH_KART
 	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_PATCH_KART);		// patch.kart
 #endif
+
+	mainwads++; W_VerifyFileMD5(mainwads, ASSET_HASH_SNOWY_PK3);		// snowy_files.pk3
+
 #else
 #ifdef USE_PATCH_DTA
 	mainwads++;	// patch.dta
@@ -1306,12 +1309,14 @@ void D_SRB2Main(void)
 	mainwads++;	// patch.kart
 #endif
 
+	mainwads++; // snowy_files.kart
+
 #endif //ifndef DEVELOP
 
 	//
 	// search for maps
 	//
-	for (wadnum = 0; wadnum < mainwads; wadnum++)
+	for (wadnum = 4; wadnum < 6; wadnum++) // fucking arbitrary numbers
 	{
 		lumpinfo = wadfiles[wadnum]->lumpinfo;
 		for (i = 0; i < wadfiles[wadnum]->numlumps; i++, lumpinfo++)
