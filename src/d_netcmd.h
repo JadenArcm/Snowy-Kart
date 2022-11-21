@@ -154,7 +154,7 @@ extern consvar_t cv_pingmeasurement;
 extern consvar_t cv_showinput, cv_showminimapnames;
 
 extern consvar_t cv_showfreeplay, cv_showviewpoint;
-extern consvar_t cv_animvoting;
+extern consvar_t cv_animvoting, cv_playersetuptype;
 
 extern consvar_t cv_skipmapcheck;
 
