@@ -1,17 +1,19 @@
-# SRB2Kart
+# SRB2Kart (Snowy Build)
 
-[SRB2Kart](https://srb2.org/mods/) is a kart racing mod based on the 3D Sonic the Hedgehog fangame [Sonic Robo Blast 2](https://srb2.org/), based on a modified version of [Doom Legacy](http://doomlegacy.sourceforge.net/).
+This modification of [SRB2Kart](https://kartkrew.org) was made for just one reason: Boredom. (And well, Vanilla SRB2 already had [one](https://github.com/JadenArcm/Snowy-Vanilla) before this, so...)
 
-## Dependencies
-- NASM (x86 builds only)
-- SDL2 (Linux/OS X only)
-- SDL2-Mixer (Linux/OS X only)
-- libupnp (Linux/OS X only)
-- libgme (Linux/OS X only)
+## What's new?
+> - HUD Enhancements.
+> - Vanilla SRB2 console behavior.
+> - Custom resolutions. (Straight from SRB2's Dynres build.)
+> - Improved Menus. ***(Lowercase, more organized.)***
+> - Callmore's character select screen, with some small changes.
+> - Server preview before connecting.
 
-## Compiling
-
-See [SRB2 Wiki/Source code compiling](http://wiki.srb2.org/wiki/Source_code_compiling). The compiling process for SRB2Kart is largely identical to SRB2.
-
+There may be more features, but who knows what those will be?
 ## Disclaimer
-Kart Krew is in no way affiliated with SEGA or Sonic Team. We do not claim ownership of any of SEGA's intellectual property used in SRB2.
+- Kart Krew is in no way affiliated with SEGA or Sonic Team. We do not claim ownership of any of SEGA's intellectual property used in SRB2.
+
+- This build is based on Vanilla Kart, neither Moe-Mansion nor Birdhouse.
+
+- This custom build uses a custom file, which can be downloaded right [here](https://cdn.discordapp.com/attachments/977366683201187890/1043946072512409610/snowy_files.pk3). Keep in mind that this can be changed frequently.
