@@ -41,7 +41,7 @@ UINT8 *screens[5];
 static CV_PossibleValue_t gamma_cons_t[] = {{0, "MIN"}, {4, "MAX"}, {0, NULL}};
 static void CV_usegamma_OnChange(void);
 
-static CV_PossibleValue_t fps_cons_t[] = {{0, "No"}, {1, "Compact"}, {2, "Enhanced"}};
+static CV_PossibleValue_t fps_cons_t[] = {{0, "No"}, {1, "Compact"}, {2, "Enhanced"}, {0, NULL}};
 consvar_t cv_ticrate = {"showfps", "No", CV_SAVE, fps_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
 consvar_t cv_usegamma = {"gamma", "0", CV_SAVE|CV_CALL, gamma_cons_t, CV_usegamma_OnChange, 0, NULL, NULL, 0, 0, NULL};
 
@@ -2471,7 +2471,7 @@ INT32 V_ThinStringWidth(const char *string, INT32 option)
 char V_GetSkincolorChar(INT32 color)
 {
 	char cstart = 0x80;
-	
+
 	switch (color)
 	{
 		case SKINCOLOR_WHITE:
@@ -2625,7 +2625,7 @@ char V_GetSkincolorChar(INT32 color)
 		default:
 			break;
 	}
-	
+
 	return cstart;
 }
 
