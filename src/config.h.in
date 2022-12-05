@@ -22,11 +22,10 @@
 #define ASSET_HASH_TEXTURES_KART "${SRB2_ASSET_textures.kart_HASH}"
 #define ASSET_HASH_CHARS_KART    "${SRB2_ASSET_chars.kart_HASH}"
 #define ASSET_HASH_MAPS_KART     "${SRB2_ASSET_maps.kart_HASH}"
+#define ASSET_HASH_SNOWY_PK3     "${SRB2_ASSET_snowy_files.pk3_HASH}" // snowy but in cmake!!!!
 #ifdef USE_PATCH_KART
 #define ASSET_HASH_PATCH_KART    "00000000000000000000000000000000"
 #endif
-
-#define ASSET_HASH_SNOWY_PK3    "${SRB2_ASSET_snowy_files.pk3_HASH}"
 
 #define SRB2_COMP_REVISION       "${SRB2_COMP_REVISION}"
 #define SRB2_COMP_BRANCH         "${SRB2_COMP_BRANCH}"
@@ -56,12 +55,10 @@
 #define ASSET_HASH_TEXTURES_KART "abb53d56aba47c3a8cb0f764da1c8b80"
 #define ASSET_HASH_CHARS_KART    "e2c428347dde52858a3dacd29fc5b964"
 #define ASSET_HASH_MAPS_KART     "d051e55141ba736582228c456953cd98"
+#define ASSET_HASH_SNOWY_PK3     "398c7cd42df9dd680dd7ccb6593cc36b" // snowy but in makefiles!!!!
 #ifdef USE_PATCH_KART
 #define ASSET_HASH_PATCH_KART    "00000000000000000000000000000000"
 #endif
-
-// snowy!!!!!
-#define ASSET_HASH_SNOWY_PK3    "398c7cd42df9dd680dd7ccb6593cc36b"
 
 #endif
 #endif
