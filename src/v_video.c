@@ -41,7 +41,7 @@ UINT8 *screens[5];
 static CV_PossibleValue_t gamma_cons_t[] = {{0, "MIN"}, {4, "MAX"}, {0, NULL}};
 static void CV_usegamma_OnChange(void);
 
-static CV_PossibleValue_t fps_cons_t[] = {{0, "No"}, {1, "Compact"}, {2, "Enhanced"}, {0, NULL}};
+static CV_PossibleValue_t fps_cons_t[] = {{0, "No"}, {1, "Vanilla"}, {2, "Enhanced"}, {0, NULL}};
 consvar_t cv_ticrate = {"showfps", "No", CV_SAVE, fps_cons_t, NULL, 0, NULL, NULL, 0, 0, NULL};
 consvar_t cv_usegamma = {"gamma", "0", CV_SAVE|CV_CALL, gamma_cons_t, CV_usegamma_OnChange, 0, NULL, NULL, 0, 0, NULL};
 
