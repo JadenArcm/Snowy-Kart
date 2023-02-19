@@ -1516,7 +1516,7 @@ static menuitem_t OP_HUDOptionsMenu[] =
 	{IT_STRING | IT_CVAR, NULL, "Show \"FOCUS LOST\"", &cv_showfocuslost, 130},
 };
 
-static menuitem_t OP_SnowyOptionsMenu[] = 
+static menuitem_t OP_SnowyOptionsMenu[] =
 {
 	{IT_HEADER, NULL, "In-game Options", NULL, 0},
 
@@ -1524,7 +1524,7 @@ static menuitem_t OP_SnowyOptionsMenu[] =
 	{IT_STRING | IT_CVAR, NULL,	"Show Minimap Names",  &cv_showminimapnames, 10},
 	{IT_STRING | IT_CVAR, NULL, "Show Freeplay Text",  &cv_showfreeplay,     15},
 	{IT_STRING | IT_CVAR, NULL, "Show Viewpoint Text", &cv_showviewpoint,    20},
-	
+
 	{IT_HEADER, NULL, "Miscellaneous", NULL, 30},
 
 	{IT_STRING | IT_CVAR, NULL, "Player Setup Style",	  &cv_playersetuptype, 35},
@@ -4983,8 +4983,8 @@ static void M_AddonsOptions(INT32 choice)
 	M_SetupNextMenu(&OP_AddonsOptionsDef);
 }
 
-#define LOCATIONSTRING1 "Visit \x83SRB2.ORG/MODS\x80 to get & make addons!"
-#define LOCATIONSTRING2 "Visit \x88SRB2.ORG/MODS\x80 to get & make addons!"
+#define LOCATIONSTRING1 "Visit \x83MB.SRB2.ORG/ADDONS\x80 to get & make addons!"
+#define LOCATIONSTRING2 "Visit \x88MB.SRB2.ORG/ADDONS\x80 to get & make addons!"
 
 static void M_Addons(INT32 choice)
 {
@@ -5206,7 +5206,7 @@ static void M_DrawAddons(void)
 	if (Playing())
 		V_DrawCenteredString(BASEVIDWIDTH/2, 5, warningflags, "Adding files mid-game may cause problems.");
 	else
-		V_DrawCenteredString(BASEVIDWIDTH/2, 5, 0, (recommendedflags == V_SKYMAP ? LOCATIONSTRING2 : LOCATIONSTRING1));
+		V_DrawCenteredThinString(BASEVIDWIDTH/2, 5, V_ALLOWLOWERCASE | V_6WIDTHSPACE, (recommendedflags == V_SKYMAP ? LOCATIONSTRING2 : LOCATIONSTRING1));
 
 	if (numwadfiles <= mainwads+1)
 		y = 0;
