@@ -325,7 +325,6 @@ menu_t OP_DiscordOptionsDef;
 #endif
 menu_t OP_HUDOptionsDef, OP_ChatOptionsDef;
 menu_t OP_GameOptionsDef, OP_ServerOptionsDef;
-menu_t OP_SnowyOptionsDef;
 #ifndef NONET
 menu_t OP_AdvServerOptionsDef;
 #endif
@@ -1085,15 +1084,15 @@ static menuitem_t MP_ConnectMenu[] =
 	{IT_STRING | IT_KEYHANDLER, NULL, "Page",     M_HandleServerPage, 12},
 	{IT_STRING | IT_CALL,       NULL, "Refresh",  M_Refresh,          20},
 
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu,  42},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu,  57},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu,  72},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu,  87},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu, 102},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu, 117},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu, 132},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu, 147},
-	{IT_STRING | IT_SPACE, NULL, "", M_PrepareConMenu, 162},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          42},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          58},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          74},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,          88},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         102},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         132},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         150},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         168},
+	{IT_STRING | IT_SPACE, NULL, "",              M_PrepareConMenu,         186},
 };
 
 enum
@@ -1128,8 +1127,6 @@ static menuitem_t OP_MainMenu[] =
 
 	{IT_CALL|IT_STRING,			NULL, "Tricks & Secrets (F1)",	M_Manual,					120},
 	{IT_CALL|IT_STRING,			NULL, "Play Credits",			M_Credits,					130},
-
-	{IT_SUBMENU|IT_STRING,		NULL, "\x83*giggle*",			&OP_SnowyOptionsDef,		150},
 };
 
 static menuitem_t OP_ControlsMenu[] =
@@ -1490,45 +1487,38 @@ static menuitem_t OP_HUDOptionsMenu[] =
 	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "HUD Translucency", 	  &cv_translucenthud,  10},
 	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Minimap Visibility",  &cv_kartminimap,	   20},
 	{IT_STRING | IT_CVAR, 				 NULL, "Speedometer Display", &cv_kartspeedometer, 25},
-	{IT_STRING | IT_CVAR, 				 NULL, "Show \"CHECK\"",	  &cv_kartcheck,	   30},
+	{IT_STRING | IT_CVAR, 				 NULL, "Input Display",		  &cv_showinput,	   30},
+	{IT_STRING | IT_CVAR, 				 NULL, "Show \"CHECK\"",	  &cv_kartcheck,	   35},
 
-	{IT_HEADER, NULL, "Console", NULL, 40},
+	{IT_HEADER, NULL, "Console", NULL, 45},
 
-	{IT_STRING | IT_CVAR, NULL,	"Menu Highlights",			&cons_menuhighlight,     45},
-	{IT_STRING | IT_CVAR, NULL, "Background Glass",			&cons_backcolor,		 50},
-	{IT_STRING | IT_CVAR, NULL,	"Console Text Size",		&cv_constextsize,		 55},
+	{IT_STRING | IT_CVAR, NULL,	"Menu Highlights",			&cons_menuhighlight,     50},
+	{IT_STRING | IT_CVAR, NULL, "Background Glass",			&cons_backcolor,		 55},
+	{IT_STRING | IT_CVAR, NULL,	"Console Text Size",		&cv_constextsize,		 60},
 
-	{IT_HEADER, NULL, "Online HUD", NULL, 65},
+	{IT_HEADER, NULL, "Online HUD", NULL, 70},
 
-	{IT_STRING | IT_CVAR, 				 NULL, "Chat Mode",			   &cv_consolechat,	 70},
-	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Chat Box Width",       &cv_chatwidth,	 75},
-	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Chat Box Height",	   &cv_chatheight,	 80},
-	{IT_STRING | IT_CVAR, 				 NULL, "Chat Background Tint", &cv_chatbacktint, 85},
+	{IT_STRING | IT_CVAR, 				 NULL, "Chat Mode",			   &cv_consolechat,	 75},
+	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Chat Box Width",       &cv_chatwidth,	 80},
+	{IT_STRING | IT_CVAR | IT_CV_SLIDER, NULL, "Chat Box Height",	   &cv_chatheight,	 85},
+	{IT_STRING | IT_CVAR, 				 NULL, "Chat Background Tint", &cv_chatbacktint, 90},
 
-	{IT_STRING | IT_CVAR, NULL, "Message Fadeout Time", &cv_chattime,			 95},
-	{IT_STRING | IT_CVAR, NULL, "Spam Protection",	    &cv_chatspamprotection,	100},
+	{IT_STRING | IT_CVAR, NULL, "Message Fadeout Time", &cv_chattime,			100},
+	{IT_STRING | IT_CVAR, NULL, "Spam Protection",	    &cv_chatspamprotection,	105},
 
-	{IT_STRING | IT_CVAR, NULL, "Ping Measurement", 	&cv_pingmeasurement,    110},
-	{IT_STRING | IT_CVAR, NULL, "Local Ping display",   &cv_showping,	    	115},
+	{IT_STRING | IT_CVAR, NULL, "Ping Measurement", 	&cv_pingmeasurement,    115},
+	{IT_STRING | IT_CVAR, NULL, "Local Ping display",   &cv_showping,	    	120},
 
-	{IT_HEADER, NULL, "Miscelleanous", NULL, 125},
+	{IT_HEADER, NULL, "Miscelleanous", NULL, 130},
 
-	{IT_STRING | IT_CVAR, NULL, "Show \"FOCUS LOST\"", &cv_showfocuslost, 130},
-};
+	{IT_STRING | IT_CVAR, NULL,	  "Show Minimap Names",   &cv_showminimapnames, 135},
+	{IT_STRING | IT_CVAR, NULL,   "Show Freeplay Text",   &cv_showfreeplay,     140},
+	{IT_STRING | IT_CVAR, NULL,   "Show Viewpoint Text",  &cv_showviewpoint,     145},
 
-static menuitem_t OP_SnowyOptionsMenu[] =
-{
-	{IT_HEADER, NULL, "In-game Options", NULL, 0},
+	{IT_STRING | IT_CVAR, NULL,	  "Animated Voting Screen", &cv_animvoting,       155},
+	{IT_STRING | IT_CVAR, NULL,   "Show \"FOCUS LOST\"",    &cv_showfocuslost,    160},
 
-	{IT_STRING | IT_CVAR, NULL, "Input Display",	   &cv_showinput,	      5},
-	{IT_STRING | IT_CVAR, NULL,	"Show Minimap Names",  &cv_showminimapnames, 10},
-	{IT_STRING | IT_CVAR, NULL, "Show Freeplay Text",  &cv_showfreeplay,     15},
-	{IT_STRING | IT_CVAR, NULL, "Show Viewpoint Text", &cv_showviewpoint,    20},
-
-	{IT_HEADER, NULL, "Miscellaneous", NULL, 30},
-
-	{IT_STRING | IT_CVAR, NULL, "Player Setup Style",	  &cv_playersetuptype, 35},
-	{IT_STRING | IT_CVAR, NULL,	"Animated Voting Screen", &cv_animvoting,      40},
+	{IT_STRING | IT_CVAR, NULL, "Player Setup Menu - Style", &cv_playersetuptype, 170},
 };
 
 // Ok it's still called chatoptions but we'll put ping display in here to be clean
@@ -2045,7 +2035,7 @@ menu_t OP_MainDef =
 	&MainDef,
 	OP_MainMenu,
 	M_DrawGenericMenu,
-	55, 23,
+	60, 30,
 	0,
 	NULL
 };
@@ -2110,18 +2100,6 @@ menu_t OP_HUDOptionsDef =
 	sizeof (OP_HUDOptionsMenu)/sizeof (menuitem_t),
 	&OP_MainDef,
 	OP_HUDOptionsMenu,
-	M_DrawGenericScrollMenu,
-	30, 30,
-	0,
-	NULL
-};
-
-menu_t OP_SnowyOptionsDef =
-{
-	"M_HUD",
-	sizeof(OP_SnowyOptionsMenu) / sizeof(menuitem_t),
-	&OP_MainDef,
-	OP_SnowyOptionsMenu,
 	M_DrawGenericScrollMenu,
 	30, 30,
 	0,
