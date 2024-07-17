@@ -1,6 +1,7 @@
 # SRB2Kart (Snowy Build)
 
 This modification of [SRB2Kart](https://kartkrew.org/) was made for just one reason: Boredom. (And well, Vanilla SRB2 already had [one](https://github.com/JadenArcm/Snowy-Vanilla/) before this, so...)
+* Archived due to lack of motivation and Ring Racers being released.
 
 ## What's new?
 > - HUD Enhancements.
